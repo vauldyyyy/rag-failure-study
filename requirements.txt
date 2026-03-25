@@ -1,0 +1,11 @@
+google-generativeai
+faiss-cpu
+tiktoken
+pandas
+numpy
+matplotlib
+seaborn
+python-dotenv
+streamlit
+altair
+requests

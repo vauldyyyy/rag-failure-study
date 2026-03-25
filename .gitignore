@@ -1,0 +1,26 @@
+# API Keys and Environment
+.env
+.env.*
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Virtual Environments
+venv/
+env/
+.venv/
+
+# IDE files
+.vscode/
+.idea/
+
+# Data artifacts (too large for GH, can be regenerated natively)
+data/vector_store.index
+data/vector_store.index_map.json
+data/squad_subset.json
+
+# If you specifically want to push results.json, we leave results/ alone, but we ignore general tmp
+tmp/
