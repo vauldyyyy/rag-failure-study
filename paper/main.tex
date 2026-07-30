@@ -153,10 +153,14 @@ answerable and \NUM{nUnanswerable} unanswerable. The unanswerable split is
 essential rather than incidental --- the gold paragraph is present in the index and
 topically perfect, yet contains no answer, which isolates abstention pressure from
 retrieval quality. The corpus is every paragraph in the split, chunked at 256
-tokens with 50-token overlap. Embeddings come from \NUM{embedModel}; retrieval is
-exact inner product over L2-normalised vectors (FAISS \texttt{IndexFlatIP}), not an
-approximate index, so no ANN error is added to the error under study. The generator
-is \NUM{genModel} at temperature 0.
+tokens with 50-token overlap. Embeddings come from \NUM{embedModel} run locally on
+CPU; retrieval is exact inner product over L2-normalised vectors (FAISS
+\texttt{IndexFlatIP}), not an approximate index, so no ANN error is added to the
+error under study. A local retriever makes the retrieval half of the pipeline
+deterministic and reproducible without API access; it is also weaker than a
+frontier embedding model, so absolute accuracy here is not comparable to SQuAD
+leaderboard numbers, and more items fall into the evidence-absent regime the study
+targets. The generator is \NUM{genModel} at temperature 0.
 
 \paragraph{Perturbations.}
 Corruption is applied to the context handed to the generator, not to the index.

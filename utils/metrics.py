@@ -31,7 +31,9 @@ import google.generativeai as genai
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
-from utils.llm import is_fatal_error
+from utils.llm import is_fatal_error, limiter as llm_limiter, note_call
+from utils.ratelimit import (DailyQuotaExhausted, is_daily_quota_error,
+                             is_quota_error, quota_sleep)
 
 genai.configure(api_key=config.GEMINI_API_KEY)
 
@@ -200,6 +202,8 @@ def judge_faithfulness(question: str, contexts: list, prediction: str, max_retri
 
     for attempt in range(max_retries):
         try:
+            llm_limiter.acquire(1)
+            note_call()
             response = _get_judge().generate_content(
                 prompt,
                 generation_config=genai.types.GenerationConfig(temperature=0.0),
@@ -209,7 +213,17 @@ def judge_faithfulness(question: str, contexts: list, prediction: str, max_retri
                 if label in text:
                     return label
             return "JUDGE_ERROR"
+        except DailyQuotaExhausted:
+            raise
         except Exception as e:
+            if is_daily_quota_error(e):
+                raise DailyQuotaExhausted(f"Daily quota exhausted during judging: {e}") from e
+            if is_quota_error(e):
+                llm_limiter.note_rejection()
+                if attempt == max_retries - 1:
+                    return "JUDGE_ERROR"
+                time.sleep(quota_sleep(attempt))
+                continue
             if is_fatal_error(e):
                 raise RuntimeError(f"Unrecoverable judge error (not retrying): {e}") from e
             if attempt == max_retries - 1:

@@ -22,6 +22,23 @@ N_QA = 600                # total questions sampled
 FRAC_UNANSWERABLE = 0.30  # SQuAD v2 is_impossible share of the sample
 
 # Models
+# --------------------------------------------------------------------------- #
+# Retrieval backend
+# --------------------------------------------------------------------------- #
+# "local"  = sentence-transformers on CPU. No API, no quota, fully deterministic,
+#            and reproducible by anyone without a key — which matters for a paper.
+# "gemini" = gemini-embedding-001 (3072-d). Stronger, but 1,330 chunks exceeds the
+#            free-tier *daily* embedding cap, so the index cannot be built in one
+#            day and every API call spent here is one not spent on generation.
+#
+# The retriever is a nuisance parameter in this study: perturbations are applied to
+# the context, and the research question is about what the generator does given
+# that context. A weaker retriever simply yields more items where the gold document
+# is absent, which is the regime of interest.
+EMBED_BACKEND = os.getenv("EMBED_BACKEND", "local")
+LOCAL_EMBED_MODEL = os.getenv("LOCAL_EMBED_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+LOCAL_EMBED_DIM = 384
+
 EMBED_MODEL = "models/gemini-embedding-001"
 LLM_MODEL = "models/gemini-2.5-flash"
 # The judge must not be the same checkpoint as the generator, otherwise faithfulness
@@ -32,6 +49,21 @@ JUDGE_SELF_EVAL = JUDGE_MODEL == LLM_MODEL
 
 # Scoring thresholds
 F1_CORRECT_THRESHOLD = 0.5   # answerable item counts as correct at/above this token F1
+
+# --------------------------------------------------------------------------- #
+# Rate limits
+# --------------------------------------------------------------------------- #
+# Requests per minute, enforced client-side. Defaults are the Google AI free tier
+# as reported by its own 429s; a batched embed call is billed per *item*, so these
+# count items rather than HTTP calls. Raise them in .env on a paid key.
+#
+#   EmbedContentRequestsPerMinutePerUserPerProjectPerModel-FreeTier = 100
+#
+EMBED_RPM = int(os.getenv("EMBED_RPM", "95"))    # slight headroom under 100
+LLM_RPM = int(os.getenv("LLM_RPM", "9"))         # free-tier flash is ~10/min
+# Per-day caps are the binding constraint on free tier and cannot be waited out.
+# Set to 0 to disable the client-side stop and rely on server 429s alone.
+LLM_RPD = int(os.getenv("LLM_RPD", "0"))
 
 # Paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -72,11 +104,17 @@ def set_dry_run(flag: bool):
 
 
 def _tag(path: str) -> str:
-    """Insert a .dryrun marker before the extension when in dry-run mode."""
-    if not DRY_RUN:
-        return path
+    """Tag index/cache paths by retrieval backend and dry-run state.
+
+    Vectors from different embedders are not interchangeable — they have different
+    dimensions and different geometry — so they must never share an index file.
+    """
     root, ext = os.path.splitext(path)
-    return f"{root}.dryrun{ext}"
+    if DRY_RUN:
+        return f"{root}.dryrun{ext}"
+    if EMBED_BACKEND == "local":
+        return f"{root}.local{ext}"
+    return path
 
 
 def require_api_key():

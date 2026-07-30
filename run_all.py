@@ -58,6 +58,12 @@ def main():
 
         print(f"\n{'=' * 70}\n{label}\n{'=' * 70}")
         result = subprocess.run(full, cwd=os.path.dirname(os.path.abspath(__file__)))
+        if result.returncode == 3:
+            # Daily quota exhausted. Checkpoints are on disk; this is not a failure.
+            print(f"\n{label} stopped on daily quota. Progress is checkpointed.")
+            print(f"Resume tomorrow with:  python run_all.py --from-step {i}"
+                  + (f" --limit {args.limit}" if args.limit else ""))
+            sys.exit(0)
         if result.returncode != 0:
             print(f"\n{label} failed (exit {result.returncode}). "
                   f"Fix, then resume with --from-step {i}")

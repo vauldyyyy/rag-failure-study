@@ -19,7 +19,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import noise as noise_mod
 from utils.metrics import ABSTAIN, CORRECT, UNSUPPORTED
-from utils.pipeline import (announce_budget, build_retrieval_cache, common_args,
+from utils.pipeline import (announce_budget, quota_guard, build_retrieval_cache, common_args,
                             load_dataset, run_condition, run_manifest, save_results)
 from utils.rerank import make_reranker
 from utils.stats import apply_fdr, paired_diff_by_qid, rate_with_ci_clustered
@@ -71,6 +71,7 @@ def main():
             system_prompt=prompt, rerank=rerank,
             use_judge=not args.no_judge, model_name=args.model,
             repeats=args.repeats, temperature=args.temperature,
+            dataset=args.dataset,
         )
         valid = [r for r in rows if r["outcome"] != "INVALID"]
         summary["ci"] = {
@@ -140,4 +141,4 @@ def _verdict(d_hall, d_corr):
 
 
 if __name__ == "__main__":
-    main()
+    quota_guard(main)()

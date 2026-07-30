@@ -22,7 +22,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import noise as noise_mod
 from utils.metrics import ABSTAIN, CORRECT, UNSUPPORTED
-from utils.pipeline import (announce_budget, build_retrieval_cache, common_args,
+from utils.pipeline import (announce_budget, quota_guard, build_retrieval_cache, common_args,
                             load_dataset, run_condition, run_manifest, save_results)
 from utils.stats import paired_diff_by_qid, rate_with_ci_clustered
 
@@ -42,7 +42,8 @@ def main():
                     use_judge=not args.no_judge, repeats=args.repeats)
 
     run_kw = dict(use_judge=not args.no_judge, model_name=args.model,
-                  repeats=args.repeats, temperature=args.temperature)
+                  repeats=args.repeats, temperature=args.temperature,
+                  dataset=args.dataset)
 
     # ---- (a) context size ------------------------------------------------- #
     print(f"--- Phase 2c(a): K sweep on {args.dataset} ---")
@@ -118,4 +119,4 @@ def _paired_f1(rows_a, rows_b):
 
 
 if __name__ == "__main__":
-    main()
+    quota_guard(main)()

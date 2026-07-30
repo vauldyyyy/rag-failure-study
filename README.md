@@ -132,6 +132,12 @@ pip install -r requirements.txt
 python data/load_squad.py                         # corpus + eval set — no API key needed
 ```
 
+**Retrieval runs locally by default** (`sentence-transformers/all-MiniLM-L6-v2` on
+CPU) — no API key, no quota, ~3 minutes to build the index, and reproducible by
+anyone. Only generation and judging need a key. Set `EMBED_BACKEND=gemini` in
+`.env` to use `gemini-embedding-001` instead, but note that 1,330 chunks exceeds
+the free tier's *daily* embedding cap, so the index cannot be built in one day.
+
 ### Try it with no API key
 
 ```bash

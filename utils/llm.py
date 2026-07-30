@@ -6,8 +6,27 @@ import google.generativeai as genai
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
+from utils.ratelimit import (DailyQuotaExhausted, RateLimiter, is_daily_quota_error,
+                             is_quota_error, quota_sleep)
 
 genai.configure(api_key=config.GEMINI_API_KEY)
+
+# Shared by generation and the judge — they draw on the same per-model quota.
+limiter = RateLimiter(config.LLM_RPM, name="llm")
+_calls_today = {"n": 0}
+
+
+def note_call():
+    _calls_today["n"] += 1
+    if config.LLM_RPD and _calls_today["n"] >= config.LLM_RPD:
+        raise DailyQuotaExhausted(
+            f"Client-side daily cap reached ({config.LLM_RPD} calls). "
+            f"Checkpoints are saved; resume tomorrow."
+        )
+
+
+def calls_made():
+    return _calls_today["n"]
 
 DEFAULT_SYSTEM_PROMPT = (
     "You are a helpful assistant. Use the following context to answer the question. "
@@ -77,6 +96,8 @@ def generate_answer(query: str, retrieved_contexts: list,
 
     for attempt in range(max_retries):
         try:
+            limiter.acquire(1)
+            note_call()
             response = model.generate_content(
                 user_prompt,
                 generation_config=genai.types.GenerationConfig(temperature=temperature),
@@ -87,11 +108,22 @@ def generate_answer(query: str, retrieved_contexts: list,
                 # No text part: safety block, recitation stop, or empty candidate.
                 reason = getattr(getattr(response, "prompt_feedback", None), "block_reason", None)
                 return {"text": "", "status": "blocked", "detail": str(reason)}
+        except DailyQuotaExhausted:
+            raise
         except Exception as e:
+            # A per-day cap will not clear by waiting, so stop the run cleanly and
+            # let the caller checkpoint rather than burn attempts.
+            if is_daily_quota_error(e):
+                raise DailyQuotaExhausted(f"Daily generation quota exhausted: {e}") from e
+            if is_quota_error(e):
+                limiter.note_rejection()
+                if attempt == max_retries - 1:
+                    return {"text": "", "status": "error", "detail": f"quota: {e}"}
+                time.sleep(quota_sleep(attempt))
+                continue
             if is_fatal_error(e):
                 raise RuntimeError(f"Unrecoverable Gemini error (not retrying): {e}") from e
             if attempt == max_retries - 1:
                 print(f"LLM Error: {e}")
                 return {"text": "", "status": "error", "detail": str(e)}
-            # Google AI free tier is 15 RPM; back off exponentially, capped at 60s.
             time.sleep(min(60, (2 ** attempt) * 4))

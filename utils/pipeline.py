@@ -23,6 +23,7 @@ from utils import noise as noise_mod
 from utils.embedder import flush, get_embedding
 from utils.llm import generate_answer
 from utils.metrics import aggregate, precision_at_k, recall_at_k, score_item
+from utils.ratelimit import DailyQuotaExhausted
 from utils.vector_store import build_or_load
 
 
@@ -103,11 +104,32 @@ def retrieval_signals(context, ranked, k):
 # Condition runner
 # --------------------------------------------------------------------------- #
 
+def _checkpoint_path(name, dataset="squad"):
+    d = os.path.join(config.RESULTS_DIR, "checkpoints")
+    os.makedirs(d, exist_ok=True)
+    safe = name.replace("/", "_").replace("@", "_at_").replace("=", "")
+    return os.path.join(d, f"{dataset}_{safe}.json")
+
+
+def load_checkpoint(name, dataset="squad"):
+    path = _checkpoint_path(name, dataset)
+    if not os.path.exists(path):
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_checkpoint(name, rows, dataset="squad"):
+    with open(_checkpoint_path(name, dataset), "w", encoding="utf-8") as f:
+        json.dump(rows, f, ensure_ascii=False)
+
+
 def run_condition(name, qa_pairs, retrieval, corpus, k=config.TOP_K,
                   noise_type=noise_mod.CLEAN, noise_frac=0.0,
                   system_prompt=None, gold_position=None, use_judge=True,
                   rerank=None, seed=config.SEED, verbose=True,
-                  model_name=config.LLM_MODEL, repeats=1, temperature=0.0):
+                  model_name=config.LLM_MODEL, repeats=1, temperature=0.0,
+                  dataset="squad", resume=True):
     """Run one experimental cell and return (rows, summary).
 
     repeats > 1 re-runs every item, which only produces variation at
@@ -116,13 +138,27 @@ def run_condition(name, qa_pairs, retrieval, corpus, k=config.TOP_K,
     inflates n.
     """
     rows = []
+    # On free-tier quota a full grid spans days. Rows are checkpointed per
+    # condition and completed (qid, repeat) pairs are skipped on resume, so a
+    # quota stop costs the current item and nothing else.
+    done = set()
+    if resume:
+        cached = load_checkpoint(name, dataset)
+        if cached:
+            rows = cached
+            done = {(r.get("qid"), r.get("repeat", 0)) for r in rows}
+            if verbose:
+                print(f"  [{name}] resuming: {len(done)} items already scored")
 
+    interrupted = None
     for r in range(repeats):
         # Re-seeded per repeat so distractor draws are reproducible but not
         # identical across repeats.
         rng = random.Random(seed + r)
 
         for i, qa in enumerate(qa_pairs):
+            if (qa["qid"], r) in done:
+                continue
             ranked = retrieval.get(qa["qid"], [])
 
             context = noise_mod.apply_noise(
@@ -133,21 +169,27 @@ def run_condition(name, qa_pairs, retrieval, corpus, k=config.TOP_K,
             if rerank is not None:
                 context = rerank(qa["question"], context)
 
-            if config.DRY_RUN:
-                from utils.stub_llm import stub_generate
-                gen = stub_generate(
-                    qa["question"], context, system_prompt=system_prompt,
-                    gold_answers=qa.get("answers"),
-                    gold_doc_ids=qa.get("gold_doc_ids") or [qa.get("gold_doc_id")],
-                    is_answerable=qa.get("is_answerable", True),
-                )
-            else:
-                gen = generate_answer(qa["question"], context,
-                                      model_name=model_name,
-                                      system_prompt=system_prompt,
-                                      temperature=temperature)
+            try:
+                if config.DRY_RUN:
+                    from utils.stub_llm import stub_generate
+                    gen = stub_generate(
+                        qa["question"], context, system_prompt=system_prompt,
+                        gold_answers=qa.get("answers"),
+                        gold_doc_ids=qa.get("gold_doc_ids") or [qa.get("gold_doc_id")],
+                        is_answerable=qa.get("is_answerable", True),
+                    )
+                else:
+                    gen = generate_answer(qa["question"], context,
+                                          model_name=model_name,
+                                          system_prompt=system_prompt,
+                                          temperature=temperature)
 
-            row = score_item(qa, gen["text"], gen["status"], context, use_judge=use_judge)
+                row = score_item(qa, gen["text"], gen["status"], context, use_judge=use_judge)
+            except DailyQuotaExhausted as e:
+                # Save what exists and stop cleanly. Tomorrow's run picks up here.
+                save_checkpoint(name, rows, dataset)
+                interrupted = e
+                break
 
             ctx_doc_ids = [c["doc_id"] for c in context]
             gold_ids = qa.get("gold_doc_ids") or [qa.get("gold_doc_id")]
@@ -169,9 +211,17 @@ def run_condition(name, qa_pairs, retrieval, corpus, k=config.TOP_K,
                 row["treatment_applied"] = row["n_perturbed"] > 0
             rows.append(row)
 
-            if verbose and (i + 1) % 50 == 0:
+            if verbose and (i + 1) % 25 == 0:
                 suffix = f" (repeat {r + 1}/{repeats})" if repeats > 1 else ""
                 print(f"  [{name}] {i + 1}/{len(qa_pairs)}{suffix}")
+                save_checkpoint(name, rows, dataset)
+
+        if interrupted:
+            break
+
+    save_checkpoint(name, rows, dataset)
+    if interrupted:
+        raise interrupted
 
     summary = aggregate(rows)
     if noise_type in (noise_mod.CLEAN, noise_mod.DROP_GOLD):
@@ -214,7 +264,9 @@ def run_manifest(dataset, qa_pairs, extra=None):
         "llm_model": config.LLM_MODEL,
         "judge_model": config.JUDGE_MODEL,
         "judge_self_eval": config.JUDGE_SELF_EVAL,
-        "embed_model": config.EMBED_MODEL,
+        "embed_backend": config.EMBED_BACKEND,
+        "embed_model": (config.LOCAL_EMBED_MODEL if config.EMBED_BACKEND == "local"
+                        else config.EMBED_MODEL),
         "chunk_size": config.CHUNK_SIZE,
         "chunk_overlap": config.CHUNK_OVERLAP,
         "retrieval_depth": config.RETRIEVAL_DEPTH,
@@ -224,6 +276,24 @@ def run_manifest(dataset, qa_pairs, extra=None):
     }
     manifest.update(extra or {})
     return manifest
+
+
+def quota_guard(main_fn):
+    """Wrap a phase's main() so a daily-quota stop exits 3, not a traceback.
+
+    run_all.py treats exit 3 as "checkpointed, resume tomorrow" rather than a
+    failure, because on free-tier quota that is the normal way a run ends.
+    """
+    def wrapped():
+        try:
+            return main_fn()
+        except DailyQuotaExhausted as e:
+            print(f"\n=== DAILY QUOTA EXHAUSTED ===\n{e}")
+            print("Rows completed so far are checkpointed in "
+                  f"{os.path.join(config.RESULTS_DIR, 'checkpoints')}.")
+            print("Re-run the same command tomorrow; it will skip what is done.")
+            sys.exit(3)
+    return wrapped
 
 
 def common_args(description):
@@ -260,9 +330,21 @@ def announce_budget(n_conditions, n_items, use_judge=True, repeats=1):
         return
     gen = n_conditions * n_items * repeats
     judge = int(gen * 0.4) if use_judge else 0
+    total = gen + judge
+    hours = total / max(config.LLM_RPM, 1) / 60
+
     print(f"\nAPI budget: ~{gen} generation calls"
           f"{f' + up to ~{judge} judge calls' if judge else ''} "
           f"({n_conditions} conditions x {n_items} items"
           f"{f' x {repeats} repeats' if repeats > 1 else ''}).")
-    print("At the free-tier 15 RPM this is roughly "
-          f"{(gen + judge) / 15 / 60:.1f} h. Use --limit for a pilot.\n")
+    print(f"Client-side pacing: {config.LLM_RPM}/min -> ~{hours:.1f} h of wall clock.")
+
+    if hours > 6:
+        print(f"\n  !! {hours:.0f} hours is longer than a single sitting, and the free")
+        print(f"     tier also enforces a per-DAY cap that this will hit first.")
+        print(f"     Rows are checkpointed per condition, so a quota stop is safe and")
+        print(f"     the next run resumes where this one ended. But consider:")
+        print(f"       --limit {max(25, n_items // 4)}      (quarter the items)")
+        print(f"       --no-judge          (removes ~{judge} calls)")
+        print(f"     or run one phase at a time rather than run_all.py.")
+    print()

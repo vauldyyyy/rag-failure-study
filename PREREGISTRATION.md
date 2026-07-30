@@ -73,5 +73,34 @@ salvage operation.
 
 ## Known deviations
 
-None yet. Any deviation from the above gets appended here with its reason and date,
-before the paper is submitted.
+Any deviation from the above is appended here with its reason and date, before the
+paper is submitted.
+
+### 2026-07-31 — retrieval backend changed from `gemini-embedding-001` to a local model
+
+**What changed.** Document and query embeddings now come from
+`sentence-transformers/all-MiniLM-L6-v2` (384-d, CPU) instead of
+`gemini-embedding-001` (3072-d, API). Set `EMBED_BACKEND=gemini` to restore the
+original.
+
+**Why.** The free-tier embedding quota has a per-day cap. The first real run
+exhausted it 760 chunks into a 1,330-chunk index build, and the daily embedding
+allowance is not large enough to finish the index in one day. Every embedding call
+also competes with the generation calls the study actually depends on.
+
+**Was this chosen to favour a result?** No — it was forced before any outcome was
+observed, and no hypothesis had been tested when the switch was made. It is logged
+here rather than silently absorbed because that is the point of this document.
+
+**Effect on the hypotheses.** None are stated in terms of retrieval quality. The
+perturbations act on the context handed to the generator, and all five hypotheses
+concern what the generator does *given* that context. A weaker retriever lowers
+`gold_in_context_rate`, which shifts more items into the evidence-absent regime the
+study is about — it does not change the direction of any prediction.
+
+**Cost, stated plainly.** Absolute accuracy numbers are lower than they would be
+with a stronger retriever and are not comparable to published SQuAD leaderboards.
+Any claim about absolute performance must be scoped to this retriever.
+
+**Benefit.** The retrieval half of the pipeline is now deterministic, free, and
+reproducible without an API key, which is strictly better for a paper.

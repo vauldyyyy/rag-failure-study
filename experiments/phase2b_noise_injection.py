@@ -19,7 +19,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import noise as noise_mod
 from utils.metrics import ABSTAIN, CORRECT, UNSUPPORTED
-from utils.pipeline import (announce_budget, build_retrieval_cache, common_args,
+from utils.pipeline import (announce_budget, quota_guard, build_retrieval_cache, common_args,
                             load_dataset, run_condition, run_manifest, save_results)
 from utils.stats import apply_fdr, paired_diff_by_qid, rate_with_ci_clustered
 
@@ -47,7 +47,8 @@ def main():
     print(f"--- Phase 2b: Noise sweep (K={K}) on {args.dataset} ---")
 
     run_kw = dict(use_judge=not args.no_judge, model_name=args.model,
-                  repeats=args.repeats, temperature=args.temperature)
+                  repeats=args.repeats, temperature=args.temperature,
+                  dataset=args.dataset)
     conditions, all_rows = {}, {}
 
     control_rows, control_summary = run_condition(
@@ -150,4 +151,4 @@ def _report_h2(conditions):
 
 
 if __name__ == "__main__":
-    main()
+    quota_guard(main)()

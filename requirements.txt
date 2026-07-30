@@ -2,6 +2,9 @@
 # pinned so runs stay reproducible; migrating utils/llm.py, utils/embedder.py and
 # utils/metrics.py to the `google-genai` client is tracked in RESEARCH.md.
 google-generativeai==0.8.5
+# Default retrieval backend: runs on CPU, needs no API key or quota, and makes the
+# retrieval half of the study reproducible by anyone.
+sentence-transformers>=3.0
 faiss-cpu>=1.8.0
 tiktoken>=0.7.0
 numpy>=1.26

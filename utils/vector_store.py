@@ -95,9 +95,9 @@ class VectorStore:
 
 def build_or_load(corpus_path: str, index_path: str, rebuild: bool = False) -> VectorStore:
     """Load the index for a corpus, embedding and building it once if needed."""
-    from utils.embedder import get_embeddings_batch, EMBED_DIM, STUB_DIM, flush
+    from utils.embedder import embed_dim, get_embeddings_batch, flush
 
-    store = VectorStore(dimension=STUB_DIM if config.DRY_RUN else EMBED_DIM)
+    store = VectorStore(dimension=embed_dim())
     map_path = index_path + "_map.json"
 
     if not rebuild and os.path.exists(index_path) and os.path.exists(map_path):
