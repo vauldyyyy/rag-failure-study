@@ -76,6 +76,40 @@ salvage operation.
 Any deviation from the above is appended here with its reason and date, before the
 paper is submitted.
 
+### 2026-07-31b — correctness criterion widened from token-F1 alone to F1 **or** gold-span containment
+
+**What changed.** An answerable item counts as `CORRECT` if token F1 ≥ 0.5 **or** the
+normalized gold span appears in the normalized prediction (capped at 30 tokens so a
+rambling answer that happens to contain the gold string is not credited). The
+generator prompt now also asks for the shortest answering span rather than a
+sentence. Both `f1` and the new `contains_gold` are recorded per row, so the
+preregistered F1-only rule can be recomputed exactly.
+
+**Why.** The preregistered rule is measurably broken for this generator's output
+style, and the pilot caught it in 14 rows. Observed case:
+
+| | |
+|---|---|
+| Question | What is Warsaw's symbol? |
+| Gold | "The mermaid" |
+| Prediction | "The mermaid (syrenka) is Warsaw's symbol." |
+| Token F1 | **0.333** → scored not-correct |
+
+SQuAD references are bare spans; a correct prose answer is penalised on precision
+for words the reference cannot contain. Under the F1-only rule, correct answers are
+labelled failures, which inflates every failure rate — including
+`silent_failure_rate`, the primary outcome.
+
+**Was this chosen to favour a result?** No. It was fixed before any hypothesis was
+tested — only 14 baseline rows existed and no condition had been compared to any
+other. Gold-span containment is the standard correctness criterion in the RAG
+literature, not a bespoke rule invented for this study. Both metrics are retained
+per row so any reader can recompute the original.
+
+**Effect on the hypotheses.** All five concern differences *between conditions*. A
+metric that undercounts correctness uniformly shifts every condition together, so
+the direction of each prediction is unchanged; the levels move.
+
 ### 2026-07-31 — retrieval backend changed from `gemini-embedding-001` to a local model
 
 **What changed.** Document and query embeddings now come from

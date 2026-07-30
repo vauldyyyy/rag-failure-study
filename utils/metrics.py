@@ -102,6 +102,25 @@ def f1_score(prediction, ground_truths):
     return max(_f1_single(prediction, g) for g in ground_truths)
 
 
+def contains_gold(prediction, ground_truths):
+    """Does the prediction contain a gold answer span?
+
+    The standard correctness criterion in the RAG literature, and necessary here:
+    a generator answering in prose is penalised by token-F1 for words the reference
+    span simply does not contain. Guarded by a length cap so a rambling answer that
+    happens to include the gold string among many other claims is not credited.
+    """
+    if isinstance(ground_truths, str):
+        ground_truths = [ground_truths]
+    if not prediction or not ground_truths:
+        return 0
+    norm_pred = normalize_answer(prediction)
+    if len(norm_pred.split()) > 30:
+        return 0
+    return int(any(normalize_answer(g) and normalize_answer(g) in norm_pred
+                   for g in ground_truths))
+
+
 def precision_at_k(retrieved_doc_ids, true_doc_id):
     return int(true_doc_id in retrieved_doc_ids)
 
@@ -261,6 +280,7 @@ def score_item(qa, prediction, status, contexts, use_judge=True):
 
     em = exact_match_score(prediction, golds) if golds else 0
     f1 = f1_score(prediction, golds) if golds else 0.0
+    has_gold = contains_gold(prediction, golds) if golds else 0
     abstained = is_abstention(prediction)
 
     gold_doc_ids = qa.get("gold_doc_ids") or [qa.get("gold_doc_id")]
@@ -270,6 +290,7 @@ def score_item(qa, prediction, status, contexts, use_judge=True):
     row.update({
         "em": em,
         "f1": round(f1, 4),
+        "contains_gold": has_gold,
         "abstained": abstained,
         "gold_in_context": gold_in_context,
     })
@@ -286,7 +307,10 @@ def score_item(qa, prediction, status, contexts, use_judge=True):
         row["judge"] = "rule:unanswerable_asserted"
         return row
 
-    if f1 >= config.F1_CORRECT_THRESHOLD:
+    # Correct if the answer either matches the reference span well (F1) or contains
+    # it outright. See PREREGISTRATION.md, deviation 2026-07-31b — the F1-only rule
+    # was preregistered and shown by the pilot to misclassify correct prose answers.
+    if f1 >= config.F1_CORRECT_THRESHOLD or has_gold:
         row["outcome"] = CORRECT
         row["judge"] = None
         # Correct without the gold document in context = the answer came from the
@@ -333,6 +357,7 @@ def aggregate(rows):
         "n_unanswerable": len(unans),
         "EM": round(sum(r["em"] for r in ans) / len(ans), 4) if ans else None,
         "F1": round(sum(r["f1"] for r in ans) / len(ans), 4) if ans else None,
+        "contains_gold_rate": rate(ans, lambda r: r.get("contains_gold")),
         "abstention_rate": rate(valid, lambda r: r["outcome"] == ABSTAIN),
         "abstention_rate_answerable": rate(ans, lambda r: r["outcome"] == ABSTAIN),
         "hallucination_rate": rate(valid, lambda r: r["outcome"] == UNSUPPORTED),

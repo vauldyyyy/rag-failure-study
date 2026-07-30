@@ -30,8 +30,14 @@ def calls_made():
 
 DEFAULT_SYSTEM_PROMPT = (
     "You are a helpful assistant. Use the following context to answer the question. "
+    "Answer with the shortest span that answers the question — a few words, not a "
+    "sentence. Do not restate the question or add explanation. "
     "If the answer is not contained in the context, say 'I cannot answer based on the context'."
 )
+# The brevity instruction is a measurement requirement, not a style preference.
+# SQuAD gold answers are bare spans, so token-F1 against a full sentence scores a
+# correct answer near 0.3 on precision alone. Observed in the pilot: gold "The
+# mermaid", model "The mermaid (syrenka) is Warsaw's symbol.", F1 0.33.
 
 # Sent to the model verbatim when a condition requires the model to abstain rather
 # than guess. Kept as a constant so the abstention detector in metrics.py and the

@@ -40,11 +40,21 @@ LOCAL_EMBED_MODEL = os.getenv("LOCAL_EMBED_MODEL", "sentence-transformers/all-Mi
 LOCAL_EMBED_DIM = 384
 
 EMBED_MODEL = "models/gemini-embedding-001"
-LLM_MODEL = "models/gemini-2.5-flash"
-# The judge must not be the same checkpoint as the generator, otherwise faithfulness
-# scores are self-evaluation. Override via .env once a second provider is available;
-# until then JUDGE_SELF_EVAL flags the limitation in every results file.
-JUDGE_MODEL = os.getenv("JUDGE_MODEL", "models/gemini-2.5-flash")
+
+# Free-tier generation quota is capped per DAY *per model*
+# (GenerateRequestsPerDayPerProjectPerModel-FreeTier), and the allowance varies by
+# an order of magnitude between model ids: gemini-2.5-flash permits only 20/day,
+# which cannot support a study needing thousands of calls. Run `python
+# probe_models.py` to see what this key can actually reach today.
+#
+# Lite-class models are also the honest choice on the merits: they are what gets
+# deployed for high-volume RAG, and the study is about high-volume RAG.
+LLM_MODEL = os.getenv("LLM_MODEL", "models/gemini-3.5-flash-lite")
+# The judge must not be the same checkpoint as the generator, or faithfulness
+# scores are self-evaluation — the single biggest threat to validity in this study.
+# Defaulting to a different model family removes it, and because free-tier quota is
+# capped per model, it also stops the judge competing with the generator for calls.
+JUDGE_MODEL = os.getenv("JUDGE_MODEL", "models/gemini-3.6-flash")
 JUDGE_SELF_EVAL = JUDGE_MODEL == LLM_MODEL
 
 # Scoring thresholds
