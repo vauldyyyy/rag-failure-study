@@ -54,7 +54,12 @@ LLM_MODEL = os.getenv("LLM_MODEL", "models/gemini-3.5-flash-lite")
 # scores are self-evaluation — the single biggest threat to validity in this study.
 # Defaulting to a different model family removes it, and because free-tier quota is
 # capped per model, it also stops the judge competing with the generator for calls.
-JUDGE_MODEL = os.getenv("JUDGE_MODEL", "models/gemini-3.6-flash")
+#
+# It must also be a *lite* model. Observed free-tier daily caps: non-lite flash
+# models (gemini-2.5-flash, gemini-3.6-flash) allow 20 requests/day, while lite
+# models allow enough to run a study. A judge on a non-lite model blocks the run
+# after 20 items no matter how much generator quota remains.
+JUDGE_MODEL = os.getenv("JUDGE_MODEL", "models/gemini-3.1-flash-lite")
 JUDGE_SELF_EVAL = JUDGE_MODEL == LLM_MODEL
 
 # Scoring thresholds
