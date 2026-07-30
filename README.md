@@ -1,92 +1,287 @@
-# When Retrieval Fails: A Study of Hallucination and Robustness in RAG Systems
+# When Retrieval Fails
 
-> **Research Question:** How do noise scale, context window saturation, and zero-shot prompting strategies independently influence hallucination rates and factual recall in Retrieval-Augmented Generation (RAG) pipelines?
+**An empirical study of how RAG systems behave when retrieval degrades — and whether the failure can be seen coming.**
 
-Retrieval-Augmented Generation (RAG) is commonly treated as a panacea for Large Language Model (LLM) hallucinations. However, enterprise systems frequently struggle with retrieval noise, unanswerable queries, and context saturation. This repository presents an empirical study evaluating the failure modes of a fundamental RAG architecture. Utilizing the SQuAD v2 dataset (containing adversarial unanswerable questions) and Google's Gemini Flash architecture, this project systematically introduces retrieval noise, varies context bounds, and measures the resulting mathematical decay in factual recall and faithfulness.
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"/>
+  <img src="https://img.shields.io/badge/Gemini-2.5%20Flash-4285F4?style=flat-square&logo=google&logoColor=white" alt="Gemini"/>
+  <img src="https://img.shields.io/badge/FAISS-IndexFlatIP-FF6F00?style=flat-square" alt="FAISS"/>
+  <img src="https://img.shields.io/badge/Data-SQuAD%20v2%20%2B%20HotpotQA-blueviolet?style=flat-square" alt="Datasets"/>
+  <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="MIT"/>
+</p>
 
----
-
-## Methodology & Experimental Design
-
-The study is executed across four distinct, isolated phases to measure robust parameter relationships. The dataset consists of a 600 QA pair subset from SQuAD v2 (70% answerable, 30% unanswerable) vectorized into a local FAISS index via `models/gemini-embedding-001` (3072-dim).
-
-- **Phase 1: Baseline Integrity (`phase1_baseline.py`)** 
-  Establishes the control metrics. Evaluates standard RAG performance with $K=3$ retrieval via FAISS cosine similarity (inner product) with no added noise. 
-  
-- **Phase 2b: Noise Injection Degradation (`phase2b_noise_injection.py`)**
-  Poisons the retrieval context. Injects up to 500 irrelevant documents into the FAISS index to measure how semantic similarity boundaries break down, and how often the LLM hallucinates over distractor text.
-  
-- **Phase 2c: Context Saturation (`phase2c_context_size.py`)**
-  Evaluates the "Lost in the Middle" phenomenon. Scales retrieval context $K$ from 1 to 10, measuring whether expanded semantic breadth actively harms precision or faithfulness.
-  
-- **Phase 4: Robustness & Filtering (`phase4_fixes.py`)**
-  Implements architectural mitigation. Explores stricter zero-shot prompt framing, retrieval reranking, and explicit "I don't know" classification heuristics to mathematically suppress the hallucination rate measured in Phase 2.
+<p align="center">
+  <b>Status: pipeline complete, tested and dry-run verified end-to-end · experiments not yet run · no results to report</b><br/>
+  <sub>Target: UncertaiNLP @ EMNLP 2026 short paper — deadline 7 August 2026</sub>
+</p>
 
 ---
 
-## Evaluation Metrics
+## Research question
 
-To ensure academic rigor, qualitative responses are mathematically judged against strict ground-truth pairs via lexical scoring and an independent LLM-as-a-judge module.
+> **When retrieval degrades, does a RAG system fail loudly or silently — and can the
+> failure be predicted from retrieval-side signals before the generator is called?**
 
-1. **Exact Match (EM):** Binary percentage of generations that precisely match the target strings after stripping punctuation and articles.
-2. **F1 Score:** Harmonic mean of precision and recall over token-level overlap. Captures partial correctness independent of strict formatting.
-3. **Precision@K (P@K):** Retrieval metric evaluating if the single ground-truth document was present in the top $K$ semantic search results.
-4. **Hallucination Rate:** The percentage of model generations that assert false facts specifically for *unanswerable* domain questions instead of cleanly refusing.
-5. **Faithfulness Score:** An LLM-as-a-judge secondary pass (via Gemini Flash) that cross-examines the generation strictly against the provided context. Evaluates to 0 if the generated claim diverges from the provided chunks.
+The first clause matters because a RAG system that says *"I cannot answer from the
+context"* is safe, and one that produces a fluent wrong answer from the same broken
+context is not — yet both count identically as an accuracy drop. This study measures
+the **composition of failures**, not the accuracy drop.
 
----
+The second clause matters because similarity scores exist before the LLM is called.
+If they separate failures from successes, an abstention gate is buildable for free.
+If they do not, that is a negative result worth publishing.
 
-## Empirical Results
-
-| Metric | Baseline (Phase 1) | +Noise (500 Docs) | Context $K=10$ | +Strict Prompt & Fixes |
-|--------|--------------------|-------------------|----------------|------------------------|
-| **Exact Match (EM)** | *[ 00.0% ]* | *[ 00.0% ]* | *[ 00.0% ]* | *[ 00.0% ]* |
-| **F1 Score** | *[ 00.0% ]* | *[ 00.0% ]* | *[ 00.0% ]* | *[ 00.0% ]* |
-| **Precision@K** | *[ 00.0% ]* | *[ 00.0% ]* | *[ 00.0% ]* | *[ 00.0% ]* |
-| **Hallucination Rate** | *[ 00.0% ]* | *[ 00.0% ]* | *[ 00.0% ]* | *[ 00.0% ]* |
-| **Faithfulness** | *[ 00.0% ]* | *[ 00.0% ]* | *[ 00.0% ]* | *[ 00.0% ]* |
-
-> *Visualizations mapping the exact decay curve of these metrics over time are available in the `/results` directory after complete execution.*
-
-### Key Findings
-
-- **[Insight 1 Placeholder]** (e.g., *Noise injection past 100 documents systematically caused EM to drop by X%, indicating that raw cosine similarity struggles to penalize semantically adjacent distractor paragraphs.*)
-- **[Insight 2 Placeholder]** (e.g., *Increasing context window to $K=10$ ironically increased the Hallucination Rate for unanswerable questions to Y%, verifying the presence of "lost in the middle" attention phenomena.*)
-- **[Insight 3 Placeholder]** (e.g., *Strict prompt heuristics alongside context reranking reduced total hallucination rates by Z%, demonstrating that generative boundaries are highly sensitive to explicit instruction over implicit context.*)
+Plan, hypotheses, verified prior-work positioning, threats to validity and the
+dated submission plan: [`RESEARCH.md`](RESEARCH.md).
+Paper skeleton: [`paper/outline.md`](paper/outline.md). Draft: [`paper/main.tex`](paper/main.tex).
 
 ---
 
-## Execution Guide
+## Results
 
-To reproduce this study's findings locally:
+**There are none yet.** The pipeline is implemented, unit-tested, and has been
+executed end-to-end against a stub model to verify every code path — but no
+experiment has been run against the API. This section will hold Table 1 and
+Figures 1–4 once `run_all.py` has completed.
 
-**1. Environment Setup**
+Nothing in this repository reports a number the pipeline did not produce, and that
+is enforced rather than promised:
+
+- every number in the paper is generated from `results/*.json` by `paper/make_tables.py`;
+- `verify_paper.py` fails the build on hardcoded numbers, undefined macros, missing
+  figures, uncited or unverified references, template placeholders, or results
+  produced in dry-run mode;
+- CI asserts that the guard *rejects* synthetic results, so the guard itself cannot
+  silently break.
+
+---
+
+## What is measured
+
+Every generation lands in exactly one outcome:
+
+| Outcome | Meaning |
+|---|---|
+| `ABSTAIN` | Declined to answer — a **safe** failure |
+| `CORRECT` | Token F1 ≥ 0.5 against gold |
+| `UNSUPPORTED` | Asserted something the retrieved context does not support — **hallucination** |
+| `INCORRECT_GROUNDED` | Wrong, but traceable to the context — a **retrieval** failure, not a generation one |
+| `INVALID` | Blocked or errored generation; excluded from every rate |
+
+Pooling `UNSUPPORTED` and `INCORRECT_GROUNDED` is what turns "RAG fails when
+retrieval is bad" into something that looks like a finding. They are kept apart.
+
+Two derived quantities carry most of the argument:
+
+- **`silent_failure_rate`** — of the answers that were not correct, what share were
+  assertions rather than abstentions.
+- **`parametric_correct_rate`** — answered correctly *without* the gold document in
+  context, i.e. from the model's weights. This inflates the baseline of every
+  retrieval ablation and is almost never reported.
+
+Every rate carries a 95% bootstrap CI; every between-condition comparison is a
+paired bootstrap over the same questions. Repeated samples of a question are
+averaged within that question before resampling, so `--repeats` cannot manufacture
+significance.
+
+---
+
+## Experimental design
+
+Perturbations are applied to the **context handed to the generator**, not to the
+FAISS index. Index poisoning makes the noise level a property of the whole run, so
+you cannot say what noise level any individual answer was produced under.
+Context-level perturbation fixes the fraction exactly, per item, and holds retrieval
+byte-identical across conditions.
+
+| Condition | Failure mode it isolates |
+|---|---|
+| `RANDOM` | Irrelevant retrieval — topically unrelated chunks |
+| `RELATED` | Partial retrieval — adjacent, plausible, wrong (real lower-ranked results) |
+| `COUNTERFACTUAL` | Contradictory retrieval — the context asserts a false answer |
+| `DROP_GOLD` | No answer in context — evidence absent, question still answerable |
+
+Each condition records `treatment_applied_rate`, because `COUNTERFACTUAL` no-ops
+when the gold string is absent from the chunk and `DROP_GOLD` no-ops when gold was
+never retrieved. A condition that fired on 40% of items is a different experiment
+from one that fired on all of them.
+
+| Phase | Varies | Fixed | Cells |
+|---|---|---|---|
+| 1 | — | K=3, clean | 1 |
+| 2b | noise type × fraction | K=4 | 10 |
+| 2c(a) | K ∈ {1,2,3,4,5,6,8,10} | clean | 8 |
+| 2c(b) | gold slot ∈ {0,4,7} | K=8, identical contents | 3 |
+| 4 | mitigation | related@50%, K=4 | 5 |
+| 3 | — re-analysis, 0 API calls | — | — |
+
+Data: **SQuAD v2 dev** — 1,204 documents → 1,330 chunks, 600 questions (420
+answerable / 180 unanswerable, seed 20240617). The unanswerable split is the point:
+gold paragraph present, topically perfect, no answer in it. Second domain:
+**HotpotQA dev (distractor)**, multi-hop with human-selected hard distractors.
+
+---
+
+## Getting started
+
 ```bash
-python -m venv venv
-source venv/bin/activate  # Or `venv\Scripts\activate` on Windows
+git clone https://github.com/vauldyyyy/rag-failure-study.git
+cd rag-failure-study
+python -m venv venv && venv\Scripts\activate      # macOS/Linux: source venv/bin/activate
 pip install -r requirements.txt
+python data/load_squad.py                         # corpus + eval set — no API key needed
 ```
 
-**2. Authentication**
-Copy the environment template and insert your active Google API key (Free Tier compatible).
+### Try it with no API key
+
 ```bash
-cp .env.example .env
-# Edit .env to add GEMINI_API_KEY=AIza...
+python run_all.py --dry-run --limit 60
 ```
 
-**3. Run the Evaluation Suite**
-The execution script automatically downloads SQuAD v2, processes adversarial chunk limits, builds the FAISS databases, and tests the LLM orchestration.
+Runs every phase against a deterministic stub model. Output goes to
+`results_dryrun/`, figures are watermarked **SYNTHETIC**, and every results file is
+stamped `"synthetic": true`. It verifies the plumbing, not the findings — a dry-run
+curve that looks like it supports a hypothesis is an artefact of the stub.
+
+### Run for real
 
 ```bash
-# 1. Ingest Data
-python data/load_squad.py
+cp .env.example .env      # then add a key from https://aistudio.google.com
+python run_all.py --limit 150     # pilot — read the Phase 2b curve before committing quota
+python run_all.py                 # full 600-item run
+```
 
-# 2. Run Phased Experiments (Sequential)
+Or phase by phase:
+
+```bash
 python experiments/phase1_baseline.py
 python experiments/phase2b_noise_injection.py
 python experiments/phase2c_context_size.py
 python experiments/phase4_fixes.py
-
-# 3. Generate Analytical Plots
+python experiments/phase3_predictability.py    # analysis only, no API calls
 python visualize_results.py
 ```
+
+Useful flags on every phase: `--limit N`, `--no-judge`, `--model <id>` (cross-model
+generality), `--repeats N --temperature T` (sampling variance), `--dataset hotpot`.
+
+**Budget.** Every script prints its API cost before starting. The full SQuAD grid is
+~27 conditions × 600 items ≈ 16k generations plus judge calls — at the free tier's
+15 RPM and daily cap that is days, not hours. Check your quota before committing;
+**n=150 with honest confidence intervals is a perfectly good short paper.** Query
+embeddings and retrieval are cached to disk, so a crashed phase never re-pays for
+retrieval, and an invalid key fails in seconds rather than hanging on backoff.
+
+### Check the automatic labels against a human
+
+```bash
+python annotate.py sample --task judge --n 150   # seeded, stratified, fixed before labelling
+python annotate.py label  --task judge           # automatic label hidden to avoid anchoring
+python annotate.py score  --task judge           # Cohen's kappa
+python annotate.py sample --task abstention --n 100
+python annotate.py score  --task abstention      # precision/recall of the abstention rule
+```
+
+This is the cheapest credibility the project can buy, and it is the one thing the
+code cannot do for you. The judge currently shares a checkpoint with the generator;
+without κ, every judge-based number is self-evaluation.
+
+### Build the paper
+
+```bash
+python paper/make_tables.py --dataset squad      # numbers -> paper/generated/
+python verify_paper.py --strict                  # must exit 0 before submitting
+cd paper && pdflatex main && bibtex main && pdflatex main && pdflatex main
+```
+
+### Tests
+
+```bash
+python tests/test_offline.py
+```
+
+49 checks over scoring, abstention detection, the perturbations, the statistics
+(including that repeated sampling cannot shrink an interval), and the dry-run stub.
+No API key required. Runs in CI on every push, along with a full dry-run pipeline.
+
+### Console
+
+```bash
+streamlit run app.py
+```
+
+Reproduce any condition interactively; browse real scored rows from `results/`.
+
+---
+
+## Project structure
+
+```
+rag-failure-study/
+├── RESEARCH.md              # question, hypotheses, verified related work, threats, dated plan
+├── paper/
+│   ├── main.tex             # 4-page draft; every number comes from a generated macro
+│   ├── refs.bib             # citations, each marked verified or not
+│   ├── make_tables.py       # results/*.json -> LaTeX tables + inline macros
+│   └── outline.md           # write-order skeleton with acceptance criteria
+├── verify_paper.py          # submission gate: no unbacked number reaches a PDF
+├── annotate.py              # human labelling + Cohen's kappa / rule precision-recall
+├── run_all.py               # every phase in dependency order
+├── app.py                   # Streamlit console
+├── visualize_results.py     # figures with bootstrap error bars
+├── config.py                # models, seeds, thresholds, paths, dry-run switch
+│
+├── data/
+│   ├── load_squad.py        # full-dev corpus + stratified 70/30 answerable split
+│   └── load_hotpot.py       # second domain, same schema
+│
+├── experiments/
+│   ├── phase1_baseline.py           # control
+│   ├── phase2b_noise_injection.py   # noise type x fraction  (H1, H2)
+│   ├── phase2c_context_size.py      # K sweep + gold position (H3)
+│   ├── phase3_predictability.py     # pre-generation failure prediction (H4)
+│   └── phase4_fixes.py              # mitigations + accuracy/safety trade-off (H5)
+│
+├── utils/
+│   ├── pipeline.py          # the single shared run loop every phase uses
+│   ├── noise.py             # the four perturbations
+│   ├── metrics.py           # outcome taxonomy, SQuAD scoring, context-grounded judge
+│   ├── stats.py             # bootstrap CIs, paired tests, AUROC, repeat clustering
+│   ├── rerank.py            # BM25 relevance filter (mitigation)
+│   ├── stub_llm.py          # deterministic dry-run model
+│   ├── embedder.py          # Gemini embeddings + disk cache
+│   ├── llm.py               # generation wrapper
+│   ├── vector_store.py      # FAISS IndexFlatIP
+│   └── chunker.py           # token-aware splitter
+│
+├── tests/test_offline.py    # 49 checks, runs without an API key
+└── results/                 # JSON with provenance manifest + figures — tracked
+```
+
+---
+
+## Known limitations
+
+Stated up front because they bound what any result here can claim. Each one now has
+either a fix or a harness; none is hand-waved.
+
+- **The judge shares a checkpoint with the generator** — faithfulness verdicts are
+  self-evaluation. Every results file records `judge_self_eval: true`. Set
+  `JUDGE_MODEL` to a different model, and run `annotate.py` to report κ.
+- **One generator family.** `--model` threads through every phase; one extra run
+  gives cross-model evidence.
+- **Abstention is detected by rule.** Hedged assertions are excluded by
+  construction and tested, but the rule's precision/recall needs human labels —
+  `annotate.py --task abstention`.
+- **1,330 chunks is not an enterprise knowledge base.** Claims are scoped to this
+  corpus size.
+- **One sample per condition** at temperature 0. `--repeats N --temperature T`
+  addresses this; intervals stay clustered by question.
+- `google-generativeai` is end-of-life; pinned for reproducibility, migration to
+  `google-genai` is tracked in [`RESEARCH.md`](RESEARCH.md).
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).

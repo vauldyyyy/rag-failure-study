@@ -1,0 +1,291 @@
+% When Retrieval Fails — workshop short paper (4 pages + references).
+%
+% Every number here comes from paper/generated/, produced by make_tables.py from
+% results/*.json. Do not type a number into this file. If a value is missing, the
+% macro is undefined and the sentence is guarded so the PDF says so out loud
+% rather than silently printing a placeholder.
+%
+% Build:  python paper/make_tables.py --dataset squad
+%         cd paper && pdflatex main && bibtex main && pdflatex main && pdflatex main
+%
+% For submission, drop the official ACL style files (acl.sty, acl_natbib.bst)
+% into this directory; the conditional below picks them up automatically.
+
+\IfFileExists{acl.sty}{
+  \documentclass[11pt]{article}
+  \usepackage[review]{acl}
+}{
+  \documentclass[11pt,a4paper]{article}
+  \usepackage[margin=1in]{geometry}
+  \usepackage{natbib}
+  \bibliographystyle{plainnat}
+  \PackageWarningNoLine{main}{acl.sty not found — building with the fallback
+    article class. Add the official ACL template before submitting.}
+}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{xcolor}
+
+% Generated macros: sample sizes, model ids, headline numbers.
+\IfFileExists{generated/macros.tex}{\input{generated/macros}}{}
+
+% \NUM{macro} prints the value if make_tables.py produced it, and a loud
+% placeholder if it did not. A missing result can therefore never masquerade
+% as a reported one.
+\newcommand{\NUM}[1]{%
+  \ifcsname #1\endcsname\csname #1\endcsname\else
+  \textcolor{red}{\textbf{[NO RESULT]}}\fi}
+
+\title{When Retrieval Fails: Silent and Loud Failure Modes in\\
+Retrieval-Augmented Generation}
+
+\author{
+  Author Name \\
+  Affiliation \\
+  \texttt{email@example.com}
+}
+
+\begin{document}
+\maketitle
+
+\ifdefined\SYNTHETICRESULTS
+\begin{center}\colorbox{red!20}{\parbox{0.9\linewidth}{\centering\bfseries
+WARNING: this draft was built from synthetic dry-run results.\\
+Every number below is a stub artefact. Not submittable.}}\end{center}
+\fi
+
+\begin{abstract}
+% WRITE THIS LAST. Six sentences: problem, gap, what was done, headline number,
+% implication, limitation. Do not write it before Section 5 is final.
+Retrieval-augmented generation is widely deployed on the premise that grounding a
+language model in retrieved text suppresses hallucination. Prior work measures how
+accuracy decays as retrieval quality falls, but accuracy pools two outcomes that
+call for opposite engineering responses: a system that declines to answer, and a
+system that answers fluently and wrongly. We measure the \emph{composition} of RAG
+failures across four controlled retrieval perturbations on \NUM{nQA} SQuAD~v2
+questions, and ask whether failures can be predicted from retrieval-side signals
+available before the generator runs.
+% TODO after Section 5: replace the next sentence with the actual finding.
+\textcolor{red}{[Headline finding sentence — write once Table~\ref{tab:noise} is final.]}
+The best pre-generation signal reaches AUROC \NUM{bestSilentAUROC} for predicting
+unsupported assertions, which bounds how much a similarity-threshold abstention
+gate can buy. Our judge shares a checkpoint with the generator, so faithfulness
+verdicts should be read as self-evaluation.
+\end{abstract}
+
+\section{Introduction}
+% WRITE FOURTH.
+Retrieval-augmented generation \citep{lewis2020rag} is the standard industrial
+answer to hallucination: retrieve evidence, condition on it, and the model stops
+inventing. The premise holds only as far as retrieval does, and in deployment it
+often does not --- knowledge bases contain near-duplicates, the answer-bearing
+passage is frequently absent, and the top-$k$ neighbours of a query are routinely
+topically adjacent but wrong.
+
+What matters when retrieval fails is not only \emph{how much} accuracy falls but
+\emph{what the system does instead}. A RAG system that responds ``I cannot answer
+from the context'' has failed safely; one that produces a confident, fluent, wrong
+answer from the same broken context has failed dangerously. Both register
+identically as an accuracy drop. Existing RAG robustness benchmarks
+\citep{chen2024rgb,cuconasu2024noise} report accuracy under noise, and
+\citet{chen2024rgb} additionally scores \emph{negative rejection} as a capability,
+but neither traces how the balance between abstention and assertion moves as
+retrieval degrades continuously.
+
+We ask two questions. First, as the fraction of a context window occupied by
+related-but-wrong evidence rises from 0 to 1, how does the split between abstention
+and unsupported assertion move? Second, can that failure be anticipated from
+similarity scores alone --- signals that exist before the generator is invoked, and
+so could gate it at zero additional model cost?
+
+\paragraph{Contributions.}
+\begin{enumerate}\itemsep0pt
+\item A perturbation protocol that fixes the corruption level of each individual
+      context exactly, rather than corrupting a shared index, and so supports
+      per-item dose--response analysis (\S\ref{sec:method}).
+\item Measurement of failure \emph{composition} rather than accuracy, separating
+      unsupported assertions from answers that are wrong but faithful to what was
+      retrieved (Table~\ref{tab:noise}).
+\item An evaluation of retrieval-side signals as a pre-generation abstention gate,
+      with operating points (Table~\ref{tab:predict}).
+\end{enumerate}
+
+\section{Related Work}
+% WRITE THIRD — after the results exist and before the introduction.
+\paragraph{RAG robustness benchmarks.}
+\citet{chen2024rgb} introduce RGB and evaluate noise robustness, negative
+rejection, information integration and counterfactual robustness; our four
+perturbations follow that taxonomy and we claim no novelty for it.
+\citet{cuconasu2024noise} report the counter-intuitive result that inserting
+\emph{random} documents can raise accuracy while related, non-answer-bearing
+documents depress it. Both report accuracy under a fixed noise setting; we vary the
+corruption fraction continuously and report what the model does when it is wrong.
+
+\paragraph{Position and distraction effects.}
+\citet{liu2024lost} show accuracy depends on where the relevant passage sits in a
+long context. Our position experiment (\S\ref{sec:results}) is an explicit
+small-scale replication, not a new finding. \citet{shi2023distracted} document the
+same sensitivity outside retrieval settings, and \citet{yoran2024robust} mitigate it
+by training; we restrict ourselves to inference-time defences.
+
+\paragraph{Abstention and confidence.}
+\citet{kadavath2022know} elicit confidence from model internals and
+\citet{asai2024selfrag} train a model to critique its own retrievals. Both require
+model access or additional generation. We ask how far a retrieval score --- already
+computed, free, and available before generation --- gets on its own, which sets the
+baseline such methods must beat. Automated RAG evaluation frameworks
+\citep{es2024ragas,saadfalcon2024ares} provide faithfulness metrics; our judge is
+narrower by design, labelling only whether each claim is entailed by the context
+actually shown to the generator.
+
+\section{Method}
+\label{sec:method}
+% WRITE SECOND.
+\paragraph{Data.}
+\NUM{nQA} questions sampled from the SQuAD~v2 development set
+\citep{rajpurkar2018squad2} with seed \NUM{randomSeed}: \NUM{nAnswerable}
+answerable and \NUM{nUnanswerable} unanswerable. The unanswerable split is
+essential rather than incidental --- the gold paragraph is present in the index and
+topically perfect, yet contains no answer, which isolates abstention pressure from
+retrieval quality. The corpus is every paragraph in the split, chunked at 256
+tokens with 50-token overlap. Embeddings come from \NUM{embedModel}; retrieval is
+exact inner product over L2-normalised vectors (FAISS \texttt{IndexFlatIP}), not an
+approximate index, so no ANN error is added to the error under study. The generator
+is \NUM{genModel} at temperature 0.
+
+\paragraph{Perturbations.}
+Corruption is applied to the context handed to the generator, not to the index.
+Poisoning a shared index makes the noise level a property of the run: an individual
+answer cannot be attributed to a known corruption level. Perturbing the context
+fixes the fraction exactly per item and holds retrieval byte-identical across
+conditions, so two conditions differ only in the named variable. We use four
+perturbations --- \textsc{random} (irrelevant chunks), \textsc{related}
+(lower-ranked real retrievals: adjacent, plausible, wrong), \textsc{counterfactual}
+(the gold answer string in context replaced by a false one, following
+\citet{longpre2021conflicts}), and \textsc{drop\_gold} (all gold chunks removed
+while the question remains answerable) --- at fractions $\{0.25, 0.5, 0.75, 1.0\}$
+of a $K{=}4$ context. Each results row records how many slots were actually
+perturbed, since \textsc{counterfactual} is a no-op when the gold string is absent
+from the retrieved text.
+
+\paragraph{Outcome taxonomy.}
+Every generation is assigned exactly one label: \textsc{abstain} (declined),
+\textsc{correct} (token F1 $\geq 0.5$ against gold), \textsc{unsupported} (asserts
+something the retrieved context does not support), \textsc{incorrect\_grounded}
+(wrong, but traceable to the context), or \textsc{invalid} (blocked or errored
+generation, excluded from all rates). Only \textsc{unsupported} counts as
+hallucination. Separating it from \textsc{incorrect\_grounded} is the point:
+pooling them turns ``retrieval was bad, so the answer was bad'' into an apparent
+finding about generation. Abstention is detected by rule; a refusal phrase followed
+by a claim (``the context does not say, but it was 1241'') is scored as an
+assertion, not an abstention.
+
+\paragraph{Judging.}
+For answerable items that were neither abstentions nor correct, a judge sees the
+question, the answer, and \emph{the context that was actually shown to the
+generator}, and labels each answer supported or unsupported. Unanswerable items
+need no judge: SQuAD~v2 guarantees no answer exists, so any assertion is
+unsupported by construction. This gating is reported rather than hidden. We also
+track \emph{parametric} correctness --- items answered correctly with the gold
+document absent from context --- because such items inflate every clean-condition
+baseline and are rarely separated out.
+
+\paragraph{Statistics.}
+Rates carry 95\% percentile bootstrap intervals over questions. Comparisons between
+conditions are paired bootstraps on the same questions, reported with two-sided
+$p$. Where a condition is sampled more than once per item, samples are averaged
+within an item before resampling, so repeated sampling cannot shrink an interval.
+
+\section{Results}
+\label{sec:results}
+% WRITE FIRST.
+Table~\ref{tab:noise} reports outcome composition across perturbations. The clean
+baseline reaches F1 \NUM{baseF} with the gold document present in
+\NUM{baseGoldInCtx}\% of contexts; \NUM{baseParametric}\% of answerable items are
+answered correctly without the gold document present at all, i.e.\ from parametric
+memory rather than retrieval.
+
+\input{generated/tab1_noise}
+
+\paragraph{Does silent failure peak at partial corruption?}
+Our pre-registered hypothesis was that the silent-failure rate --- the share of
+non-correct answers that are assertions rather than abstentions --- is
+non-monotonic in the corruption fraction, peaking where the context is partly
+plausible rather than wholly useless. The observed peak is at
+\NUM{peakNoiseFrac}\% corruption (\NUM{peakSilentFail}\%).
+\textcolor{red}{[If \texttt{HOneSupported} is \texttt{false}, say so plainly here
+and rewrite the abstract around the predictability result. A monotonic curve is a
+reportable negative result, not a failure of the study.]}
+
+\paragraph{Context size and position.}
+Figure~\ref{fig:size} sweeps $K$ from 1 to 10 under clean retrieval. Answer F1 and
+gold-in-context rate diverge as $K$ grows: retrieval keeps improving while answers
+do not, which localises the loss in generation rather than retrieval. Holding $K=8$
+and the context contents fixed while moving the gold chunk between the first,
+middle and last slot tests \citet{liu2024lost} directly.
+
+\paragraph{Predicting failure before generation.}
+Table~\ref{tab:predict} gives the AUROC of each retrieval-side signal.
+The strongest predictor of an unsupported assertion is \NUM{bestSilentSignal} at
+AUROC \NUM{bestSilentAUROC}.
+\textcolor{red}{[Interpret against 0.5. Below $\approx$0.6, state plainly that a
+similarity-threshold gate is not viable and that post-hoc verification is required
+--- that is a useful negative result for practitioners and belongs in the abstract.]}
+
+\input{generated/tab2_predictability}
+
+\paragraph{Mitigations.}
+Figure~\ref{fig:mitigation} plots each inference-time defence as a pair: change in
+hallucination rate against change in correct rate, both paired against no
+mitigation under the same degraded retrieval. Any instruction that pushes a model
+toward abstention lowers hallucination; the question is whether it lowers it faster
+than it discards correct answers. Only the upper-left quadrant is a win.
+
+\begin{figure}[t]\centering
+  \includegraphics[width=\linewidth]{../results/fig2_context_size_squad.png}
+  \caption{Answer F1 and gold-in-context rate against context size $K$.}
+  \label{fig:size}
+\end{figure}
+
+\begin{figure}[t]\centering
+  \includegraphics[width=\linewidth]{../results/fig4_mitigation_tradeoff_squad.png}
+  \caption{Mitigations trade accuracy for safety. Points below the dotted
+  break-even line discard at least as much correct output as hallucination.}
+  \label{fig:mitigation}
+\end{figure}
+
+\section{Conclusion}
+\textcolor{red}{[Two sentences, written last, restating only what the tables show.]}
+
+\section*{Limitations}
+% Required at *ACL venues. Reviewers reward candour here; the facts are
+% discoverable either way.
+Our judge is currently the same checkpoint as the generator
+(\NUM{judgeModel} judging \NUM{genModel}), so faithfulness verdicts are
+self-evaluation; every results file records this flag, and agreement against human
+labels is reported in the repository rather than assumed. All findings concern a
+single generator family and do not establish cross-model generality. Abstention is
+detected by a lexical rule whose precision and recall are measured on a
+hand-labelled subset but which will misclassify unusual phrasings. The corpus is
+roughly 1.3k chunks --- small enough that claims should not be extrapolated to
+production-scale knowledge bases. Conditions are run once at temperature 0; a
+single deterministic sample is not the same as an estimate of sampling variance.
+Finally, the perturbations are synthetic by construction: they isolate failure
+modes cleanly at the cost of not being drawn from any observed deployment
+distribution.
+
+\section*{Ethics Statement}
+This work uses public QA benchmarks and involves no human subjects and no personal
+data. It characterises conditions under which retrieval-augmented systems assert
+unsupported claims; the intent is to make such failures measurable and detectable,
+and the mitigation analysis is reported with its accuracy cost so that it cannot be
+read as a solved problem.
+
+\bibliography{refs}
+
+\end{document}

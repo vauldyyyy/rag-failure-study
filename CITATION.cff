@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use this code or its results, please cite it as below."
+title: "When Retrieval Fails: Silent and Loud Failure Modes in Retrieval-Augmented Generation"
+abstract: >-
+  A controlled study of what retrieval-augmented generation does when retrieval
+  degrades: whether it abstains (safe failure) or asserts unsupported claims
+  (silent failure), and whether that outcome can be predicted from retrieval-side
+  signals before the generator is called.
+type: software
+authors:
+  - alias: vauldyyyy
+    # Replace with your full name and ORCID before submission.
+repository-code: "https://github.com/vauldyyyy/rag-failure-study"
+license: MIT
+keywords:
+  - retrieval-augmented generation
+  - hallucination
+  - abstention
+  - selective prediction
+  - evaluation

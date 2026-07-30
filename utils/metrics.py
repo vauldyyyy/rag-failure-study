@@ -1,70 +1,337 @@
-import string
-import re
-import google.generativeai as genai
+"""Scoring for the failure study.
+
+The central measurement decision here: **hallucination is never scored from the
+answer alone.** The judge always sees the retrieved context, because "is this
+claim unsupported?" is undefined without the evidence the model was given. Where
+the label can be derived without a judge at all — an unanswerable SQuAD question
+that the model answered anyway — it is, because a rule is cheaper and more
+reproducible than an LLM call.
+
+Outcome taxonomy, applied per item:
+
+    ABSTAIN              model declined to answer
+    CORRECT              token F1 vs gold >= F1_CORRECT_THRESHOLD
+    UNSUPPORTED          asserted content the retrieved context does not support
+    INCORRECT_GROUNDED   wrong, but the claim does trace to the retrieved context
+                         (a retrieval failure, not a generation failure)
+
+Only UNSUPPORTED counts as hallucination. Separating it from INCORRECT_GROUNDED is
+the point of the study: pooling them is what makes "RAG fails when retrieval is
+bad" look like a finding.
+"""
+
 import os
+import re
+import string
 import sys
+import time
+from collections import Counter
+
+import google.generativeai as genai
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
+from utils.llm import is_fatal_error
 
 genai.configure(api_key=config.GEMINI_API_KEY)
 
+ABSTAIN = "ABSTAIN"
+CORRECT = "CORRECT"
+UNSUPPORTED = "UNSUPPORTED"
+INCORRECT_GROUNDED = "INCORRECT_GROUNDED"
+INVALID = "INVALID"          # blocked / errored generation, excluded from all rates
+
+
+# --------------------------------------------------------------------------- #
+# Lexical scoring (official SQuAD v2 definitions)
+# --------------------------------------------------------------------------- #
+
 def normalize_answer(s):
+    if not s:
+        return ""
+
     def remove_articles(text):
-        return re.sub(r'\b(a|an|the)\b', ' ', text)
+        return re.sub(r"\b(a|an|the)\b", " ", text)
+
     def white_space_fix(text):
-        return ' '.join(text.split())
+        return " ".join(text.split())
+
     def remove_punc(text):
         exclude = set(string.punctuation)
-        return ''.join(ch for ch in text if ch not in exclude)
-    def lower(text):
-        if not s: return ""
-        return text.lower()
-    if not s: return ""
-    return white_space_fix(remove_articles(remove_punc(lower(s))))
+        return "".join(ch for ch in text if ch not in exclude)
 
-def exact_match_score(prediction, ground_truth):
-    if not prediction or not ground_truth: return 0
-    return int(normalize_answer(prediction) == normalize_answer(ground_truth))
+    return white_space_fix(remove_articles(remove_punc(s.lower())))
 
-def f1_score(prediction, ground_truth):
-    if not prediction or not ground_truth: return 0
-    prediction_tokens = normalize_answer(prediction).split()
-    ground_truth_tokens = normalize_answer(ground_truth).split()
-    common = set(prediction_tokens) & set(ground_truth_tokens)
-    num_same = len(common)
-    if num_same == 0: return 0
-    precision = 1.0 * num_same / len(prediction_tokens)
-    recall = 1.0 * num_same / len(ground_truth_tokens)
-    f1 = (2 * precision * recall) / (precision + recall)
-    return f1
+
+def _f1_single(prediction, ground_truth):
+    pred_tokens = normalize_answer(prediction).split()
+    gold_tokens = normalize_answer(ground_truth).split()
+    if not pred_tokens or not gold_tokens:
+        return float(pred_tokens == gold_tokens)
+
+    # Multiset overlap, not set overlap: a set drops repeated tokens and inflates
+    # precision on long generations, which is exactly the regime this study is in.
+    common = Counter(pred_tokens) & Counter(gold_tokens)
+    num_same = sum(common.values())
+    if num_same == 0:
+        return 0.0
+
+    precision = num_same / len(pred_tokens)
+    recall = num_same / len(gold_tokens)
+    return (2 * precision * recall) / (precision + recall)
+
+
+def exact_match_score(prediction, ground_truths):
+    """Max EM over all annotator answers, per official SQuAD scoring."""
+    if isinstance(ground_truths, str):
+        ground_truths = [ground_truths]
+    if not prediction or not ground_truths:
+        return 0
+    norm_pred = normalize_answer(prediction)
+    return int(any(norm_pred == normalize_answer(g) for g in ground_truths))
+
+
+def f1_score(prediction, ground_truths):
+    """Max token F1 over all annotator answers."""
+    if isinstance(ground_truths, str):
+        ground_truths = [ground_truths]
+    if not prediction or not ground_truths:
+        return 0.0
+    return max(_f1_single(prediction, g) for g in ground_truths)
+
 
 def precision_at_k(retrieved_doc_ids, true_doc_id):
     return int(true_doc_id in retrieved_doc_ids)
 
-def is_hallucinated(prediction):
-    refusals = ["i cannot answer", "not contained in the context", "i don't know", "i do not know", "error generating"]
-    pred_lower = prediction.lower()
-    for ref in refusals:
-        if ref in pred_lower:
-            return 0 
-            
-    # Gemini Flash LLM as a judge for hallucination based purely on answer
-    prompt = (
-        f"You are a judge assessing if an Answer is a hallucination. "
-        f"Answer: {prediction}\n\n"
-        f"Respond 'HALLUCINATION' if it makes egregious unsupported factual claims, otherwise say 'FAITHFUL'."
+
+def recall_at_k(retrieved_doc_ids, gold_doc_ids):
+    """Share of gold documents present in the retrieved set (multi-hop aware)."""
+    gold = [g for g in (gold_doc_ids or []) if g]
+    if not gold:
+        return 0.0
+    return sum(g in retrieved_doc_ids for g in gold) / len(gold)
+
+
+# --------------------------------------------------------------------------- #
+# Abstention detection
+# --------------------------------------------------------------------------- #
+
+_REFUSAL_PATTERNS = [
+    r"i cannot answer",
+    r"i can(?:'|no)t answer",
+    r"cannot be answered",
+    r"unable to answer",
+    r"i do(?:n't| not) know",
+    r"not contained in the (?:given |provided |above )?context",
+    r"not (?:present|found|mentioned|stated|specified|provided|available) in the (?:given |provided |above )?context",
+    r"context does(?:n't| not) (?:contain|provide|mention|specify|include)",
+    r"no (?:answer|information) (?:is )?(?:available|provided|present)",
+    r"insufficient (?:context|information)",
+]
+_REFUSAL_RE = re.compile("|".join(_REFUSAL_PATTERNS), re.IGNORECASE)
+
+
+def is_abstention(prediction: str):
+    """True when the response is a refusal rather than an assertion.
+
+    A refusal phrase alone is not enough — "the context does not say when, but it
+    was 1241" is an assertion wearing a hedge, and scoring it as an abstention
+    would hide precisely the silent-failure behaviour under study. So a response
+    counts as abstention only if the refusal opens the response, or the whole
+    response is short enough that there is no room for a trailing claim.
+    """
+    if not prediction or not prediction.strip():
+        return False
+
+    text = prediction.strip()
+    match = _REFUSAL_RE.search(text)
+    if not match:
+        return False
+
+    opens_with_refusal = match.start() <= 40
+    is_short = len(text.split()) <= 25
+    return bool(opens_with_refusal and is_short) or (opens_with_refusal and text.count(".") <= 1)
+
+
+# --------------------------------------------------------------------------- #
+# LLM-as-a-judge (context-grounded)
+# --------------------------------------------------------------------------- #
+
+_JUDGE_PROMPT = """You are grading whether an ANSWER is supported by the CONTEXT it was given.
+
+You are NOT grading whether the answer is true in the real world, and you are NOT
+grading whether it matches any reference answer. Judge only this: is every factual
+claim in the ANSWER stated in or directly entailed by the CONTEXT?
+
+CONTEXT:
+{context}
+
+QUESTION: {question}
+ANSWER: {answer}
+
+Reply with exactly one word:
+SUPPORTED   - every claim in the answer is stated in or entailed by the context
+UNSUPPORTED - the answer asserts at least one thing the context does not support
+REFUSAL     - the answer declines to answer and asserts nothing"""
+
+_judge_model = None
+
+
+def _get_judge():
+    global _judge_model
+    if _judge_model is None:
+        _judge_model = genai.GenerativeModel(config.JUDGE_MODEL)
+    return _judge_model
+
+
+def judge_faithfulness(question: str, contexts: list, prediction: str, max_retries: int = 5):
+    """Return SUPPORTED | UNSUPPORTED | REFUSAL | JUDGE_ERROR."""
+    context_text = "\n\n".join(
+        f"Context {i + 1}:\n{c['text']}" for i, c in enumerate(contexts)
+    ) or "(no context was retrieved)"
+
+    if config.DRY_RUN:
+        from utils.stub_llm import stub_judge
+        return stub_judge(question, contexts, prediction)
+
+    prompt = _JUDGE_PROMPT.format(
+        context=context_text, question=question, answer=prediction
     )
-    import time
-    for attempt in range(5):
+
+    for attempt in range(max_retries):
         try:
-            model = genai.GenerativeModel(config.LLM_MODEL)
-            response = model.generate_content(prompt)
-            text = response.text.lower()
-            if "hallucination" in text:
-                return 1
-            return 0
+            response = _get_judge().generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(temperature=0.0),
+            )
+            text = response.text.strip().upper()
+            for label in ("UNSUPPORTED", "SUPPORTED", "REFUSAL"):
+                if label in text:
+                    return label
+            return "JUDGE_ERROR"
         except Exception as e:
-            if attempt == 4:
-                return 0
+            if is_fatal_error(e):
+                raise RuntimeError(f"Unrecoverable judge error (not retrying): {e}") from e
+            if attempt == max_retries - 1:
+                print(f"Judge error: {e}")
+                return "JUDGE_ERROR"
             time.sleep(min(60, (2 ** attempt) * 4))
+
+
+# --------------------------------------------------------------------------- #
+# Item-level outcome
+# --------------------------------------------------------------------------- #
+
+def score_item(qa, prediction, status, contexts, use_judge=True):
+    """Score one generation into the outcome taxonomy.
+
+    `contexts` must be exactly the context list handed to the generator, after any
+    noise perturbation — judging against the pre-perturbation retrieval would score
+    a different experiment than the one that was run.
+    """
+    golds = qa.get("answers") or []
+    answerable = qa.get("is_answerable", True)
+
+    row = {
+        "qid": qa.get("qid"),
+        "question": qa["question"],
+        "gold_answers": golds,
+        "is_answerable": answerable,
+        "prediction": prediction,
+        "gen_status": status,
+    }
+
+    if status != "ok":
+        row.update({"outcome": INVALID, "em": None, "f1": None, "abstained": None})
+        return row
+
+    em = exact_match_score(prediction, golds) if golds else 0
+    f1 = f1_score(prediction, golds) if golds else 0.0
+    abstained = is_abstention(prediction)
+
+    gold_doc_ids = qa.get("gold_doc_ids") or [qa.get("gold_doc_id")]
+    ctx_doc_ids = [c["doc_id"] for c in contexts]
+    gold_in_context = any(g in ctx_doc_ids for g in gold_doc_ids if g)
+
+    row.update({
+        "em": em,
+        "f1": round(f1, 4),
+        "abstained": abstained,
+        "gold_in_context": gold_in_context,
+    })
+
+    if abstained:
+        row["outcome"] = ABSTAIN
+        row["judge"] = None
+        return row
+
+    if not answerable:
+        # SQuAD v2 guarantees the gold paragraph contains no answer. The model
+        # asserted something anyway, so no judge call is needed or wanted.
+        row["outcome"] = UNSUPPORTED
+        row["judge"] = "rule:unanswerable_asserted"
+        return row
+
+    if f1 >= config.F1_CORRECT_THRESHOLD:
+        row["outcome"] = CORRECT
+        row["judge"] = None
+        # Correct without the gold document in context = the answer came from the
+        # model's weights, not from retrieval. Tracked because it inflates every
+        # accuracy number in a way retrieval ablations are supposed to remove.
+        row["parametric"] = not gold_in_context
+        return row
+
+    if use_judge:
+        verdict = judge_faithfulness(row["question"], contexts, prediction)
+        row["judge"] = verdict
+        if verdict == "UNSUPPORTED":
+            row["outcome"] = UNSUPPORTED
+        elif verdict == "REFUSAL":
+            row["outcome"] = ABSTAIN
+        elif verdict == "SUPPORTED":
+            row["outcome"] = INCORRECT_GROUNDED
+        else:
+            row["outcome"] = INVALID
+    else:
+        row["judge"] = None
+        row["outcome"] = UNSUPPORTED if not gold_in_context else INCORRECT_GROUNDED
+
+    return row
+
+
+def aggregate(rows):
+    """Condition-level rates. Rates are computed over valid generations only."""
+    valid = [r for r in rows if r["outcome"] != INVALID]
+    n = len(valid)
+    if n == 0:
+        return {"n": 0, "n_invalid": len(rows)}
+
+    ans = [r for r in valid if r["is_answerable"]]
+    unans = [r for r in valid if not r["is_answerable"]]
+
+    def rate(subset, pred):
+        return round(sum(1 for r in subset if pred(r)) / len(subset), 4) if subset else None
+
+    summary = {
+        "n": n,
+        "n_invalid": len(rows) - n,
+        "n_answerable": len(ans),
+        "n_unanswerable": len(unans),
+        "EM": round(sum(r["em"] for r in ans) / len(ans), 4) if ans else None,
+        "F1": round(sum(r["f1"] for r in ans) / len(ans), 4) if ans else None,
+        "abstention_rate": rate(valid, lambda r: r["outcome"] == ABSTAIN),
+        "abstention_rate_answerable": rate(ans, lambda r: r["outcome"] == ABSTAIN),
+        "hallucination_rate": rate(valid, lambda r: r["outcome"] == UNSUPPORTED),
+        "hallucination_rate_answerable": rate(ans, lambda r: r["outcome"] == UNSUPPORTED),
+        "hallucination_rate_unanswerable": rate(unans, lambda r: r["outcome"] == UNSUPPORTED),
+        "incorrect_grounded_rate": rate(valid, lambda r: r["outcome"] == INCORRECT_GROUNDED),
+        "gold_in_context_rate": rate(valid, lambda r: r.get("gold_in_context")),
+        "parametric_correct_rate": rate(ans, lambda r: r.get("parametric") is True),
+        "judge_self_eval": config.JUDGE_SELF_EVAL,
+    }
+
+    # The headline behaviour: among items the model got wrong, how often did it
+    # assert rather than abstain? This is the "silent failure" rate.
+    wrong = [r for r in valid if r["outcome"] in (UNSUPPORTED, INCORRECT_GROUNDED, ABSTAIN)]
+    summary["silent_failure_rate"] = rate(wrong, lambda r: r["outcome"] != ABSTAIN)
+    return summary

@@ -1,48 +1,130 @@
-import sys
+"""Phase 4 — mitigations, evaluated where the failure actually happens.
+
+Two corrections to the original design:
+
+1. Mitigations are applied under the *degraded* condition (related noise at 50%,
+   the regime Phase 2b identifies as most dangerous), not on clean retrieval.
+   A defence measured on a pipeline that was not failing shows nothing.
+
+2. The outcome is a trade-off, not a single number. Any prompt that pushes a model
+   toward abstention will reduce hallucination — and will also refuse questions it
+   could have answered. So each mitigation reports the pair
+   (fall in hallucination rate, fall in correct rate). A mitigation only counts as
+   a win if the first clearly exceeds the second.
+"""
+
 import os
-import json
+import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import config
-from utils.vector_store import VectorStore
-from utils.embedder import get_embedding
-from utils.llm import generate_answer
-from utils.metrics import exact_match_score, f1_score
+from utils import noise as noise_mod
+from utils.metrics import ABSTAIN, CORRECT, UNSUPPORTED
+from utils.pipeline import (announce_budget, build_retrieval_cache, common_args,
+                            load_dataset, run_condition, run_manifest, save_results)
+from utils.rerank import make_reranker
+from utils.stats import paired_diff_by_qid, rate_with_ci_clustered
 
-def run_fixes_exp():
-    print("--- Phase 4: Strict RAG Configuration Evaluation ---")
-    store = VectorStore(dimension=3072)
-    store.load(config.FAISS_INDEX_PATH)
-    
-    with open(config.SQUAD_SUBSET_PATH, 'r', encoding='utf-8') as f:
-        qa_pairs = json.load(f)
+K = 4
+NOISE_TYPE = noise_mod.RELATED
+NOISE_FRAC = 0.5
 
-    em_total, f1_total = 0, 0
-    
-    strict_prompt = (
-        "You are a strict technical assistant. You must ONLY answer using the exact facts provided in the context below. "
-        "If the context does not explicitly contain the answer, you must output exactly 'I do not know'. "
-        "Do not hallucinate, deduce, or infer outside the given text."
+STRICT_PROMPT = (
+    "You answer strictly from the provided context. "
+    "If the context does not explicitly state the answer, reply with exactly: "
+    "I cannot answer based on the context. "
+    "Do not infer, deduce, or use prior knowledge. Do not guess."
+)
+
+CITED_PROMPT = (
+    "You answer strictly from the provided context. "
+    "Give the answer, then on a new line write 'Source: Context N' naming the "
+    "context that states it. If no context states the answer, reply with exactly: "
+    "I cannot answer based on the context."
+)
+
+MITIGATIONS = [
+    ("none", None, None),
+    ("strict_prompt", STRICT_PROMPT, None),
+    ("cite_source", CITED_PROMPT, None),
+    ("bm25_rerank", None, make_reranker(keep=2)),
+    ("strict+rerank", STRICT_PROMPT, make_reranker(keep=2)),
+]
+
+
+def main():
+    args = common_args("Phase 4: mitigations under degraded retrieval")
+    qa_pairs, corpus, store, cache_path = load_dataset(
+        args.dataset, limit=args.limit, rebuild_index=args.rebuild_index
     )
-    
-    for i, qa in enumerate(qa_pairs):
-        q, gold_ans = qa["question"], qa["answer"]
-        q_emb = get_embedding(q)
-        retrieved = store.search(q_emb, top_k=config.TOP_K)
-        
-        pred = generate_answer(q, retrieved, system_prompt=strict_prompt)
-        em, f1 = exact_match_score(pred, gold_ans), f1_score(pred, gold_ans)
-        
-        em_total += em
-        f1_total += f1
-        if (i+1) % 100 == 0: print(f" Processed Phase 4 {i+1}/600...")
+    retrieval = build_retrieval_cache(qa_pairs, store, cache_path)
 
-    n = len(qa_pairs)
-    summary = {"EM": em_total / n, "F1": f1_total / n}
-    print("\nPhase 4 Results:", summary)
-    
-    with open(os.path.join(config.RESULTS_DIR, "phase4_fixes.json"), 'w', encoding='utf-8') as f:
-        json.dump(summary, f, indent=2)
+    announce_budget(len(MITIGATIONS), len(qa_pairs), use_judge=not args.no_judge,
+                    repeats=args.repeats)
+    print(f"--- Phase 4: mitigations under {NOISE_TYPE}@{int(NOISE_FRAC * 100)}%, "
+          f"K={K}, on {args.dataset} ---")
 
-if __name__ == '__main__':
-    run_fixes_exp()
+    conditions, all_rows = {}, {}
+    for name, prompt, rerank in MITIGATIONS:
+        rows, summary = run_condition(
+            name, qa_pairs, retrieval, corpus, k=K,
+            noise_type=NOISE_TYPE, noise_frac=NOISE_FRAC,
+            system_prompt=prompt, rerank=rerank,
+            use_judge=not args.no_judge, model_name=args.model,
+            repeats=args.repeats, temperature=args.temperature,
+        )
+        valid = [r for r in rows if r["outcome"] != "INVALID"]
+        summary["ci"] = {
+            "hallucination_rate": rate_with_ci_clustered(valid, lambda r: r["outcome"] == UNSUPPORTED),
+            "abstention_rate": rate_with_ci_clustered(valid, lambda r: r["outcome"] == ABSTAIN),
+            "correct_rate": rate_with_ci_clustered(valid, lambda r: r["outcome"] == CORRECT),
+        }
+        conditions[name], all_rows[name] = summary, rows
+        print(f"  {name:15s} halluc={summary.get('hallucination_rate')} "
+              f"abstain={summary.get('abstention_rate')} F1={summary.get('F1')}")
+
+    control = all_rows["none"]
+    print("\nTrade-off vs no mitigation (paired, 95% CI):")
+    print(f"  {'mitigation':16s}{'d halluc':>22}{'d correct':>22}   verdict")
+    for name, _, _ in MITIGATIONS[1:]:
+        rows = all_rows[name]
+        d_hall = _paired(control, rows, lambda r: 1.0 if r["outcome"] == UNSUPPORTED else 0.0)
+        d_corr = _paired(control, rows, lambda r: 1.0 if r["outcome"] == CORRECT else 0.0)
+        conditions[name]["vs_none"] = {"hallucination_rate": d_hall, "correct_rate": d_corr}
+
+        verdict = _verdict(d_hall, d_corr)
+        print(f"  {name:16s}{_fmt(d_hall):>22}{_fmt(d_corr):>22}   {verdict}")
+        conditions[name]["verdict"] = verdict
+
+    save_results(f"phase4_fixes_{args.dataset}.json", {
+        "manifest": run_manifest(args.dataset, qa_pairs, {
+            "k": K, "noise_type": NOISE_TYPE, "noise_frac": NOISE_FRAC,
+            "mitigations": [m[0] for m in MITIGATIONS],
+        }),
+        "conditions": conditions,
+        "rows": all_rows,
+    })
+
+
+def _paired(control_rows, rows, fn):
+    return paired_diff_by_qid(control_rows, rows, fn)
+
+
+def _fmt(d):
+    if not d:
+        return "n/a"
+    return f"{d['diff']:+.3f} [{d['lo']:+.3f},{d['hi']:+.3f}]"
+
+
+def _verdict(d_hall, d_corr):
+    """A mitigation wins only if it removes more hallucination than accuracy."""
+    if not d_hall or not d_corr:
+        return "n/a"
+    if d_hall["hi"] >= 0:
+        return "no significant reduction in hallucination"
+    if d_corr["lo"] <= 0 and abs(d_corr["diff"]) >= abs(d_hall["diff"]):
+        return "trades away as much accuracy as it saves"
+    return "net win"
+
+
+if __name__ == "__main__":
+    main()

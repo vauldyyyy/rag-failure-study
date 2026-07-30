@@ -1,165 +1,199 @@
-import streamlit as st
+"""Interactive console.
+
+Note on the Failure Case Viewer: it reads real rows out of results/*.json. An
+earlier version of this file shipped hand-written example failures with invented
+model outputs and invented noise levels, presented as specimens from the Phase 2
+run. Nothing in this app displays a number the pipeline did not produce.
+"""
+
+import glob
 import json
 import os
 import random
+
+import streamlit as st
+
 import config
-from utils.vector_store import VectorStore
+from utils import noise as noise_mod
 from utils.embedder import get_embedding
 from utils.llm import generate_answer
-from utils.metrics import is_hallucinated
+from utils.metrics import is_abstention, judge_faithfulness
+from utils.vector_store import VectorStore
 
-# Page config
-st.set_page_config(page_title="RAG Failure Console", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="RAG Failure Console", layout="wide",
+                   initial_sidebar_state="expanded")
 
-# Initialize custom dark-mode aesthetic styling
-st.markdown("""
-<style>
-    .reportview-container {
-        background: #0E1117;
-    }
-    .stButton>button {
-        background-color: #FF4B4B;
-        color: white;
-        font-weight: bold;
-    }
-    .stAlert {
-        border-left: 4px solid #FF4B4B;
-    }
-</style>
-""", unsafe_allow_html=True)
 
-# Cache Loaders
 @st.cache_resource
-def load_corpus():
-    if not os.path.exists(config.CORPUS_PATH): return []
-    with open(config.CORPUS_PATH, 'r', encoding='utf-8') as f:
+def load_corpus(dataset):
+    corpus_path, _, _, _ = config.dataset_paths(dataset)
+    if not os.path.exists(corpus_path):
+        return []
+    with open(corpus_path, "r", encoding="utf-8") as f:
         return json.load(f)
 
+
 @st.cache_resource
-def load_vector_store():
-    store = VectorStore(dimension=3072)
-    if os.path.exists(config.FAISS_INDEX_PATH):
-        store.load(config.FAISS_INDEX_PATH)
-    return store
+def load_vector_store(dataset):
+    _, _, index_path, _ = config.dataset_paths(dataset)
+    if not os.path.exists(index_path):
+        return None
+    return VectorStore().load(index_path)
 
-corpus = load_corpus()
-base_store = load_vector_store()
 
-st.title("🚨 When Retrieval Fails: Failure Exploration Console")
-st.markdown("*An interactive diagnostic console exposing the internal retrieval vulnerabilities and generation boundaries of our evaluated RAG architecture.*")
+@st.cache_data
+def load_result_rows():
+    """Every scored row this study has written, flattened."""
+    rows = []
+    for path in sorted(glob.glob(os.path.join(config.RESULTS_DIR, "phase*.json"))):
+        with open(path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        for row in _walk(payload.get("rows")):
+            row["_source"] = os.path.basename(path)
+            rows.append(row)
+    return rows
 
-tab1, tab2, tab3 = st.tabs(["⚡ Query Playground", "🔍 Failure Case Viewer", "📊 Metric Snapshot"])
 
-with tab1:
-    st.header("Query Playground")
-    st.markdown("Test the RAG pipeline dynamically. Inject irrelevant Distractor Documents (Noise) or scale the Context Window ($K$).")
-    
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        st.subheader("Experimental Controls")
-        query = st.text_input("Enter Question:", "Who authored the laws of motion?")
-        k_val = st.slider("Context Vectors (K)", min_value=1, max_value=10, value=3)
-        noise_level = st.slider("Noise Level (Distractor Docs)", min_value=0, max_value=500, value=0)
-        
-        run_btn = st.button("Run Evaluation Pipeline", type="primary")
-        
-        st.caption("This triggers the actual Gemini 2.5 Flash and Embedding endpoints sequentially, mapping to the FAISS internal search.")
-        
-    with col2:
-        if run_btn and query:
-            if not corpus:
-                st.error("Corpus not found. Ensure `data/load_squad.py` has run.")
+def _walk(node):
+    if node is None:
+        return
+    if isinstance(node, list):
+        for item in node:
+            if isinstance(item, dict) and "outcome" in item:
+                yield item
             else:
-                with st.spinner("Embedding query and executing Gemini FAISS retrieval..."):
-                    query_emb = get_embedding(query)
-                    
-                    # Search base store
-                    distances, indices = base_store.search(query_emb, k=k_val)
-                    
-                    retrieved_chunks = []
-                    for i, idx in enumerate(indices[0]):
-                        doc = next((c for c in corpus if str(c['id']) == str(base_store.index_map.get(str(idx)))), None)
-                        if doc: retrieved_chunks.append({"chunk": doc['chunk'], "score": distances[0][i]})
-                    
-                    # Noise Injection Simulation: Pad context randomly with distractor corpus chunks
-                    if noise_level > 0:
-                        st.warning(f"⚠️ Injected {noise_level} distractor contexts into the prompt to stress test semantic focus.")
-                        shuffled_corpus = random.sample(corpus, min(noise_level, len(corpus)))
-                        for doc in shuffled_corpus:
-                            retrieved_chunks.append({"chunk": doc['chunk'], "score": 0.0}) # Artificial noise
-                    
-                with st.spinner("Executing LLM generation and Faithfulness judge..."):
-                    filtered_context = retrieved_chunks[: (k_val + noise_level)] 
-                    final_answer = generate_answer(query, filtered_context)
-                    
-                    is_hall = is_hallucinated(final_answer)
-                
-                st.subheader("Model Output")
-                st.info(final_answer)
-                
-                if is_hall:
-                    st.error("🚨 HALLUCINATION DETECTED: The generation diverged from factual constraint bounds.")
+                yield from _walk(item)
+    elif isinstance(node, dict):
+        for value in node.values():
+            yield from _walk(value)
+
+
+dataset = st.sidebar.selectbox("Dataset", ["squad", "hotpot"])
+corpus = load_corpus(dataset)
+store = load_vector_store(dataset)
+
+st.title("When Retrieval Fails — exploration console")
+st.caption("Reproduce any condition from the study interactively. "
+           "Live generations call the Gemini API and cost quota.")
+
+tab1, tab2, tab3 = st.tabs(["Query playground", "Observed failures", "Results"])
+
+# --------------------------------------------------------------------------- #
+with tab1:
+    if store is None:
+        st.error(f"No index for '{dataset}'. Run `python data/load_{dataset}.py` "
+                 f"then any experiment phase to build it.")
+    else:
+        col1, col2 = st.columns([1, 2])
+
+        with col1:
+            query = st.text_input("Question", "In what country is Normandy located?")
+            k_val = st.slider("Context size K", 1, 10, config.TOP_K)
+            noise_type = st.selectbox(
+                "Perturbation",
+                [noise_mod.CLEAN, noise_mod.RELATED, noise_mod.RANDOM,
+                 noise_mod.COUNTERFACTUAL, noise_mod.DROP_GOLD],
+            )
+            noise_frac = st.slider("Share of context slots perturbed", 0.0, 1.0, 0.5, 0.25,
+                                   disabled=noise_type == noise_mod.CLEAN)
+            strict = st.checkbox("Strict abstention prompt")
+            run_btn = st.button("Run", type="primary")
+
+        with col2:
+            if run_btn and query:
+                with st.spinner("Retrieving..."):
+                    emb = get_embedding(query, task_type="RETRIEVAL_QUERY")
+                    ranked = store.search(emb, top_k=config.RETRIEVAL_DEPTH)
+
+                # No gold document is known for a free-text query, so gold-relative
+                # perturbations degrade to "perturb the top slots".
+                pseudo_qa = {"question": query, "answers": [], "gold_doc_id": None}
+                context = noise_mod.apply_noise(
+                    ranked, pseudo_qa, k_val,
+                    noise_type=noise_type,
+                    noise_frac=0.0 if noise_type == noise_mod.CLEAN else noise_frac,
+                    corpus=corpus, rng=random.Random(config.SEED),
+                )
+                if noise_type == noise_mod.DROP_GOLD:
+                    st.info("drop_gold needs a labelled gold document; on a free-text "
+                            "query it behaves as clean retrieval.")
+
+                prompt = (
+                    "You answer strictly from the provided context. If the context does "
+                    "not explicitly state the answer, reply with exactly: "
+                    "I cannot answer based on the context."
+                ) if strict else None
+
+                with st.spinner("Generating..."):
+                    gen = generate_answer(query, context, system_prompt=prompt)
+
+                st.subheader("Answer")
+                if gen["status"] != "ok":
+                    st.error(f"Generation {gen['status']}: {gen.get('detail', '')}")
                 else:
-                    st.success("✅ Output deemed FAITHFUL or successfully refused.")
-                    
-                st.subheader("Retrieval Transparency View")
-                st.markdown(f"Displaying top-{k_val} retrieved chunks prior to scaling.")
-                for i, chunk in enumerate(retrieved_chunks[:k_val]):
-                    st.markdown(f"**Chunk {i+1}** (Cosine Similarity IP score: `{float(chunk['score']):.4f}`)")
-                    st.caption(chunk["chunk"])
+                    st.info(gen["text"])
+                    abstained = is_abstention(gen["text"])
+                    if abstained:
+                        st.success("Abstained — safe failure")
+                    else:
+                        with st.spinner("Judging against the shown context..."):
+                            verdict = judge_faithfulness(query, context, gen["text"])
+                        if verdict == "UNSUPPORTED":
+                            st.error("UNSUPPORTED — asserts something the context does not support")
+                        elif verdict == "SUPPORTED":
+                            st.success("SUPPORTED by the context shown below")
+                        else:
+                            st.warning(f"Judge returned: {verdict}")
+                        if config.JUDGE_SELF_EVAL:
+                            st.caption("Judge and generator are the same model — "
+                                       "this verdict is self-evaluation.")
 
+                st.subheader(f"Context actually sent to the model ({len(context)} chunks)")
+                for i, c in enumerate(context):
+                    tag = c.get("perturbed")
+                    label = f"Context {i + 1} — sim {c.get('score', 0):.4f}"
+                    if tag:
+                        label += f"  [injected: {tag}]"
+                    with st.expander(label, expanded=i == 0):
+                        st.write(c["text"])
+
+# --------------------------------------------------------------------------- #
 with tab2:
-    st.header("Failure Case Viewer")
-    st.markdown("Select a hand-curated qualitative failure generated during the Phase 2 adversarial injection test.")
-    
-    cases = {
-        "Clean Hit (Phase 1 Baseline)": {
-            "q": "In what country is Normandy located?", 
-            "gt": "France", 
-            "out": "Normandy is located in France.", 
-            "eval": "✅ Exact Match",
-            "desc": "Standard unperturbed RAG behavior executing correctly under K=3 parameters."
-        },
-        "Distractor Hallucination (+500 Noise Docs)": {
-            "q": "What year did the Mongols invade Poland?", 
-            "gt": "1259", 
-            "out": "The Mongols invaded Hungary in 1241.", 
-            "eval": "🚨 False Assertion (Hallucination)",
-            "desc": "The model's attention was fundamentally diluted by the 500 injected adversarial documents, causing it to grab the closest semantic artifact (Hungary) instead of explicitly recognizing it didn't hold the Poland index."
-        },
-        "Refusal (Unanswerable Question)": {
-            "q": "Who was the first person to walk on Mars?", 
-            "gt": "", 
-            "out": "I cannot answer based on the context.", 
-            "eval": "✅ Safe Refusal",
-            "desc": "Correctly identifying zero-shot boundaries and safely refusing generation logic when missing exact context vectors."
-        },
-    }
-    selection = st.selectbox("Select Phenomenon", list(cases.keys()))
-    
-    sel_case = cases[selection]
-    st.warning(sel_case["desc"])
-    colA, colB = st.columns(2)
-    with colA:
-        st.markdown(f"**Query:**\n\n> {sel_case['q']}")
-        st.markdown(f"**Ground Truth Target:**\n\n> `{sel_case['gt'] if sel_case['gt'] else 'UNANSWERABLE (Refusal Array Expected)'}`")
-    with colB:
-        st.markdown(f"**Model Response:**\n\n> {sel_case['out']}")
-        st.markdown(f"**Empirical Verdict:**\n\n> **{sel_case['eval']}**")
+    rows = load_result_rows()
+    if not rows:
+        st.info("No result files yet. Run the experiment phases to populate this tab.")
+    else:
+        outcomes = sorted({r["outcome"] for r in rows})
+        pick = st.selectbox("Outcome", outcomes,
+                            index=outcomes.index("UNSUPPORTED") if "UNSUPPORTED" in outcomes else 0)
+        subset = [r for r in rows if r["outcome"] == pick]
+        st.caption(f"{len(subset)} of {len(rows)} scored generations")
 
+        conditions = sorted({r.get("condition", "?") for r in subset})
+        cond = st.selectbox("Condition", ["(all)"] + conditions)
+        if cond != "(all)":
+            subset = [r for r in subset if r.get("condition") == cond]
+
+        for r in subset[:40]:
+            with st.expander(f"[{r.get('condition')}] {r['question'][:90]}"):
+                st.markdown(f"**Gold:** `{r.get('gold_answers') or 'UNANSWERABLE'}`")
+                st.markdown(f"**Model:** {r.get('prediction')}")
+                st.markdown(
+                    f"**F1** {r.get('f1')} · **gold in context** {r.get('gold_in_context')} "
+                    f"· **judge** {r.get('judge')} · **source** `{r.get('_source')}`"
+                )
+
+# --------------------------------------------------------------------------- #
 with tab3:
-    st.header("Metric Snapshot")
-    st.markdown("Visualized empirical decay of the RAG pipeline.")
-    
-    col3, col4 = st.columns(2)
-    
-    if os.path.exists("results/overall_metrics.png"):
-        col3.image("results/overall_metrics.png", caption="Hallucination & F1 Trends under Noise Scaling")
-    else:
-        col3.info("`overall_metrics.png` is currently generating in the persistent background script... Once output naturally completes, refresh this console to visualize.")
-        
-    if os.path.exists("results/context_size_impact.png"):
-        col4.image("results/context_size_impact.png", caption="Lost in the Middle Impact over scale K")
-    else:
-        col4.info("`context_size_impact.png` is parsing against the SQuAD limits... Refresh console to load.")
+    figs = sorted(glob.glob(os.path.join(config.RESULTS_DIR, "fig*.png")))
+    if not figs:
+        st.info("No figures yet. Run `python visualize_results.py` after the phases.")
+    for path in figs:
+        st.image(path, caption=os.path.basename(path))
+
+    summaries = sorted(glob.glob(os.path.join(config.RESULTS_DIR, "phase*.json")))
+    for path in summaries:
+        with open(path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        with st.expander(os.path.basename(path)):
+            st.json({k: v for k, v in payload.items() if k != "rows"})

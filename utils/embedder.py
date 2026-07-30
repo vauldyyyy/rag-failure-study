@@ -1,49 +1,130 @@
-import google.generativeai as genai
+import hashlib
+import json
+import os
+import sys
 import time
 from typing import List
-import sys
-import os
+
+import google.generativeai as genai
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
+from utils.llm import is_fatal_error
 
 genai.configure(api_key=config.GEMINI_API_KEY)
 
-def get_embedding(text: str, model: str = config.EMBED_MODEL, max_retries: int = 3):
+EMBED_DIM = 3072
+STUB_DIM = 512  # dry-run only
+
+
+def _stub_embedding(text: str):
+    """Hashed bag-of-words vector — deterministic, offline, no API.
+
+    Used only under --dry-run. Retrieval quality is poor compared to a real
+    embedding model, which is fine and even useful: it guarantees the pipeline is
+    exercised on items where the gold document was *not* retrieved.
+    """
+    import re
+    vec = [0.0] * STUB_DIM
+    for token in re.findall(r"[a-z0-9]+", text.lower()):
+        if len(token) < 3:
+            continue
+        h = int(hashlib.md5(token.encode("utf-8")).hexdigest()[:8], 16)
+        vec[h % STUB_DIM] += 1.0
+    norm = sum(v * v for v in vec) ** 0.5
+    return [v / norm for v in vec] if norm else vec
+
+# Query embeddings are re-used across every experimental condition, so they are
+# cached on disk. This is not an optimisation detail: it also guarantees that two
+# conditions compared against each other saw byte-identical query vectors.
+_cache = None
+
+
+def _load_cache():
+    global _cache
+    if _cache is None:
+        if os.path.exists(config.QUERY_EMB_CACHE):
+            with open(config.QUERY_EMB_CACHE, "r", encoding="utf-8") as f:
+                _cache = json.load(f)
+        else:
+            _cache = {}
+    return _cache
+
+
+def _flush_cache():
+    if _cache is not None:
+        tmp = config.QUERY_EMB_CACHE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(_cache, f)
+        os.replace(tmp, config.QUERY_EMB_CACHE)
+
+
+def _key(text: str, task_type: str) -> str:
+    return hashlib.sha1(f"{config.EMBED_MODEL}|{task_type}|{text}".encode("utf-8")).hexdigest()
+
+
+def get_embedding(text: str, model: str = config.EMBED_MODEL,
+                  task_type: str = "RETRIEVAL_QUERY", max_retries: int = 5,
+                  use_cache: bool = True):
     text = text.replace("\n", " ")
+    if config.DRY_RUN:
+        return _stub_embedding(text)
+    cache = _load_cache() if use_cache else {}
+    k = _key(text, task_type)
+    if k in cache:
+        return cache[k]
+
     for attempt in range(max_retries):
         try:
-            result = genai.embed_content(
-                model=model,
-                content=text,
-                task_type="RETRIEVAL_QUERY"
-            )
-            return result['embedding']
+            result = genai.embed_content(model=model, content=text, task_type=task_type)
+            emb = result["embedding"]
+            if use_cache:
+                cache[k] = emb
+                if len(cache) % 50 == 0:
+                    _flush_cache()
+            return emb
         except Exception as e:
+            # Returning a zero vector on failure would silently corrupt every
+            # downstream similarity score, so this always raises rather than degrades.
+            if is_fatal_error(e):
+                raise RuntimeError(f"Unrecoverable embedding error (not retrying): {e}") from e
             if attempt == max_retries - 1:
-                print(f"Failed to embed text: {e}")
-                return [0.0] * 3072
-            time.sleep(2 ** attempt)
+                raise RuntimeError(f"Embedding failed after {max_retries} attempts: {e}") from e
+            time.sleep(min(60, (2 ** attempt) * 2))
 
-def get_embeddings_batch(texts: List[str], model: str = config.EMBED_MODEL, batch_size: int = 100):
+
+def get_embeddings_batch(texts: List[str], model: str = config.EMBED_MODEL,
+                         batch_size: int = 100, task_type: str = "RETRIEVAL_DOCUMENT"):
+    if config.DRY_RUN:
+        return [_stub_embedding(t) for t in texts]
+
     all_embeddings = []
-    
+
     for i in range(0, len(texts), batch_size):
-        batch = [t.replace("\n", " ") for t in texts[i:i+batch_size]]
-        for attempt in range(3):
+        batch = [t.replace("\n", " ") for t in texts[i:i + batch_size]]
+        for attempt in range(5):
             try:
-                result = genai.embed_content(
-                    model=model,
-                    content=batch,
-                    task_type="RETRIEVAL_DOCUMENT"
-                )
-                embeddings = result['embedding']
+                result = genai.embed_content(model=model, content=batch, task_type=task_type)
+                embeddings = result["embedding"]
+                if len(embeddings) != len(batch):
+                    raise RuntimeError(
+                        f"API returned {len(embeddings)} embeddings for {len(batch)} inputs"
+                    )
                 all_embeddings.extend(embeddings)
                 break
             except Exception as e:
-                if attempt == 2:
-                    print(f"Batch failed: {e}")
-                    all_embeddings.extend([[0.0] * 3072] * len(batch))
-                time.sleep(2 ** attempt)
-                
+                if is_fatal_error(e):
+                    raise RuntimeError(f"Unrecoverable embedding error (not retrying): {e}") from e
+                if attempt == 4:
+                    raise RuntimeError(
+                        f"Embedding batch {i}-{i + len(batch)} failed after 5 attempts: {e}"
+                    ) from e
+                time.sleep(min(60, (2 ** attempt) * 2))
+        print(f"  embedded {min(i + batch_size, len(texts))}/{len(texts)}", end="\r")
+
+    print()
     return all_embeddings
+
+
+def flush():
+    _flush_cache()

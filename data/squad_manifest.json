@@ -1,0 +1,13 @@
+{
+  "dataset": "squad_v2_dev",
+  "seed": 20240617,
+  "n_documents": 1204,
+  "n_chunks": 1330,
+  "n_qa": 600,
+  "n_answerable": 420,
+  "n_unanswerable": 180,
+  "chunk_size": 256,
+  "chunk_overlap": 50,
+  "pool_answerable": 5928,
+  "pool_unanswerable": 5945
+}

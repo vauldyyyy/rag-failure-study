@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Offline test suite
+        # No API key: covers scoring, abstention detection, the perturbations and
+        # the statistics — everything where a silent bug corrupts every number.
+        run: python tests/test_offline.py
+
+      - name: Rebuild the evaluation set from the raw dataset
+        run: python data/load_squad.py
+
+      - name: End-to-end dry run
+        # Executes all phases against the deterministic stub model, so a broken
+        # pipeline is caught here rather than four hours into a real run.
+        run: python run_all.py --dry-run --limit 40
+
+      - name: Paper table generation (synthetic)
+        run: python paper/make_tables.py --dataset squad --dry-run --allow-synthetic
+
+      - name: Submission gate must reject synthetic results
+        # verify_paper.py is supposed to FAIL on dry-run output. If it passes,
+        # the guard is broken and a synthetic number could reach a submission.
+        run: |
+          if python verify_paper.py --dry-run; then
+            echo "verify_paper.py accepted synthetic results — guard is broken"
+            exit 1
+          fi
+          echo "Guard correctly rejected synthetic results."

@@ -1,11 +1,11 @@
-google-generativeai
-faiss-cpu
-tiktoken
-pandas
-numpy
-matplotlib
-seaborn
-python-dotenv
-streamlit
-altair
-requests
+# NOTE: google-generativeai is end-of-life and no longer receives fixes. It is
+# pinned so runs stay reproducible; migrating utils/llm.py, utils/embedder.py and
+# utils/metrics.py to the `google-genai` client is tracked in RESEARCH.md.
+google-generativeai==0.8.5
+faiss-cpu>=1.8.0
+tiktoken>=0.7.0
+numpy>=1.26
+matplotlib>=3.8
+seaborn>=0.13
+python-dotenv>=1.0
+streamlit>=1.36
