@@ -46,3 +46,7 @@ paper/*.blg
 paper/*.pdf
 
 # Human annotations ARE tracked — they are the evidence for the agreement stats.
+
+# Transient run logs
+run.log
+*.log
