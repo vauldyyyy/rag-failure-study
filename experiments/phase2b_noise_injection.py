@@ -21,7 +21,7 @@ from utils import noise as noise_mod
 from utils.metrics import ABSTAIN, CORRECT, UNSUPPORTED
 from utils.pipeline import (announce_budget, build_retrieval_cache, common_args,
                             load_dataset, run_condition, run_manifest, save_results)
-from utils.stats import paired_diff_by_qid, rate_with_ci_clustered
+from utils.stats import apply_fdr, paired_diff_by_qid, rate_with_ci_clustered
 
 K = 4
 
@@ -78,6 +78,21 @@ def main():
 
         conditions[name], all_rows[name] = summary, rows
         print(f"  {name}: {_line(summary)}")
+
+    # Every noise condition is tested against the same clean control, so this is a
+    # family of ~9 comparisons per metric. Uncorrected, one "significant" cell is
+    # expected by chance alone. FDR-adjust before anything is called a finding.
+    for metric in ("F1", "abstention_rate", "hallucination_rate"):
+        family = {name: (conditions[name].get("vs_clean") or {}).get(metric)
+                  for name in conditions if name != "clean"}
+        apply_fdr(family)
+    n_survive = sum(
+        1 for name in conditions if name != "clean"
+        and ((conditions[name].get("vs_clean") or {}).get("hallucination_rate") or {})
+        .get("significant_fdr")
+    )
+    print(f"\nFDR (BH, alpha=0.05) over {len(conditions) - 1} comparisons: "
+          f"{n_survive} hallucination-rate differences survive correction.")
 
     save_results(f"phase2b_noise_{args.dataset}.json", {
         "manifest": run_manifest(args.dataset, qa_pairs, {"k": K, "grid": [list(g) for g in GRID]}),

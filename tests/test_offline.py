@@ -164,6 +164,48 @@ check("stub judge grounds in context",
 check("stub judge flags ungrounded",
       stub_judge("q", [{"text": "Normandy is in France"}], "Berlin Germany Prussia") == "UNSUPPORTED")
 
+# --- multiple comparisons -----------------------------------------------------
+from utils.stats import benjamini_hochberg, apply_fdr, ci_halfwidth, n_for_halfwidth
+
+bh = benjamini_hochberg([0.001, 0.04, 0.30, 0.80], alpha=0.05)
+check("BH keeps the clearly significant", bh[0]["significant_fdr"] is True, bh[0])
+check("BH rejects the marginal in a family of 4", bh[1]["significant_fdr"] is False, bh[1])
+check("BH q-values are monotone in p",
+      bh[0]["q_value"] <= bh[1]["q_value"] <= bh[2]["q_value"] <= bh[3]["q_value"],
+      [b["q_value"] for b in bh])
+check("BH passes None through", benjamini_hochberg([None, 0.01])[0] is None)
+check("BH handles all-None", benjamini_hochberg([None, None]) == [None, None])
+
+fam = {"a": {"p_two_sided": 0.001}, "b": {"p_two_sided": 0.9}, "c": None}
+apply_fdr(fam)
+check("apply_fdr annotates in place and tolerates None",
+      fam["a"]["significant_fdr"] and not fam["b"]["significant_fdr"] and fam["c"] is None)
+
+# --- power --------------------------------------------------------------------
+check("CI half-width shrinks as 1/sqrt(n)",
+      abs(ci_halfwidth(0.5, 100) / ci_halfwidth(0.5, 400) - 2.0) < 0.01,
+      ci_halfwidth(0.5, 100) / ci_halfwidth(0.5, 400))
+check("n_for_halfwidth inverts ci_halfwidth",
+      abs(ci_halfwidth(0.5, n_for_halfwidth(0.5, 0.05)) - 0.05) < 0.001)
+
+# --- gate economics -----------------------------------------------------------
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                "experiments"))
+from phase3_predictability import gate_economics
+
+# High scores => correct, low scores => unsupported. A gate must help here.
+sep = ([{"signals": {"top1_score": 0.9}, "outcome": "CORRECT"}] * 50
+       + [{"signals": {"top1_score": 0.1}, "outcome": "UNSUPPORTED"}] * 50)
+econ = gate_economics(sep, cost_ratios=(1, 5))
+check("gate helps when signal separates", econ["break_even_cost_ratio"] == 1, econ["break_even_cost_ratio"])
+
+# Score carries no information: no threshold should beat answering everything.
+noise_rows = [{"signals": {"top1_score": 0.5},
+               "outcome": "CORRECT" if i % 2 else "UNSUPPORTED"} for i in range(100)]
+econ2 = gate_economics(noise_rows, cost_ratios=(1, 5))
+check("gate does not help on an uninformative signal",
+      econ2["break_even_cost_ratio"] is None, econ2["break_even_cost_ratio"])
+
 # --- fatal-error classification ----------------------------------------------
 from utils.llm import is_fatal_error
 

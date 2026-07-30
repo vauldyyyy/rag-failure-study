@@ -109,16 +109,89 @@ def main():
                       f"{_fmt(t['failure_rate_kept']):<12}{_fmt(t['failure_rate_dropped'])}")
         print()
 
+    # AUROC alone does not tell a practitioner whether to deploy a gate. This does.
+    report["gate_economics"] = gate_economics(rows)
+
     interp = (
         "AUROC near 0.5 means retrieval scores carry no usable pre-generation signal; "
         "a system cannot gate on them and must fall back to post-hoc verification. "
         "AUROC above ~0.7 means an abstention gate is viable and the threshold table "
-        "gives its operating points."
+        "gives its operating points. The break-even cost ratio below translates that "
+        "into a deployment decision."
     )
     report["interpretation"] = interp
     print(interp)
 
     save_results(f"phase3_predictability_{args.dataset}.json", report)
+
+
+def gate_economics(rows, signal=None, cost_ratios=(1, 2, 5, 10, 20, 50)):
+    """When is a similarity gate actually worth deploying?
+
+    AUROC is a ranking statistic; it does not say whether to ship the gate. The
+    decision depends on how much worse a hallucination is than a refusal, which is
+    a property of the application, not the model. So sweep it.
+
+    Utility of a policy = (correct answers served) - C x (unsupported assertions
+    served), where C is the cost of one hallucination expressed in units of one
+    correct answer. Ungated policy answers everything. Gated policy answers only
+    items whose retrieval score clears a threshold, abstaining on the rest.
+
+    The number that matters is the break-even C: below it, gating destroys more
+    value than it protects, and the honest recommendation is "don't gate".
+    """
+    signal = signal or "top1_score"
+    scored = [(r["signals"].get(signal, 0.0),
+               r["outcome"] == CORRECT,
+               r["outcome"] == UNSUPPORTED) for r in rows if r.get("signals")]
+    if not scored:
+        return None
+
+    thresholds = sorted({s for s, _, _ in scored})
+    # Cap the sweep so this stays cheap on large row counts.
+    if len(thresholds) > 200:
+        step = len(thresholds) // 200
+        thresholds = thresholds[::step]
+
+    out = {"signal": signal, "n": len(scored), "by_cost_ratio": []}
+    for c in cost_ratios:
+        ungated = sum(1 for _, ok, _ in scored if ok) - c * sum(1 for _, _, bad in scored if bad)
+
+        best_util, best_t, best_kept = ungated, None, 1.0
+        for t in thresholds:
+            kept = [(ok, bad) for s, ok, bad in scored if s >= t]
+            util = sum(1 for ok, _ in kept if ok) - c * sum(1 for _, bad in kept if bad)
+            if util > best_util:
+                best_util, best_t, best_kept = util, t, len(kept) / len(scored)
+
+        out["by_cost_ratio"].append({
+            "cost_ratio": c,
+            "ungated_utility": round(ungated / len(scored), 4),
+            "best_gated_utility": round(best_util / len(scored), 4),
+            "optimal_threshold": None if best_t is None else round(best_t, 4),
+            "answered_share": round(best_kept, 4),
+            "gate_helps": best_t is not None,
+        })
+
+    helping = [r["cost_ratio"] for r in out["by_cost_ratio"] if r["gate_helps"]]
+    out["break_even_cost_ratio"] = min(helping) if helping else None
+
+    print(f"\nGate economics on '{signal}' "
+          f"(C = cost of one hallucination in units of one correct answer)")
+    print(f"  {'C':>4}{'ungated':>10}{'gated':>10}{'threshold':>12}{'answered':>11}")
+    for r in out["by_cost_ratio"]:
+        thr = "--" if r["optimal_threshold"] is None else f"{r['optimal_threshold']:.4f}"
+        print(f"  {r['cost_ratio']:>4}{r['ungated_utility']:>10.3f}"
+              f"{r['best_gated_utility']:>10.3f}{thr:>12}"
+              f"{r['answered_share'] * 100:>10.0f}%")
+
+    if out["break_even_cost_ratio"] is None:
+        print("  -> No threshold beats answering everything at any tested cost ratio.")
+        print("     Report this: a retrieval-score gate is not deployable here.")
+    else:
+        print(f"  -> Gating pays off once a hallucination costs more than "
+              f"{out['break_even_cost_ratio']}x a correct answer.")
+    return out
 
 
 def _fmt(v):

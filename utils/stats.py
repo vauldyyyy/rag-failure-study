@@ -115,6 +115,92 @@ def rate_with_ci_clustered(rows, value_fn, seed=0):
     return bootstrap_ci(collapse_repeats(rows, value_fn), seed=seed)
 
 
+def benjamini_hochberg(pvalues, alpha=0.05):
+    """FDR correction over a family of tests.
+
+    This study runs ~25 paired comparisons against a single control. At alpha=0.05
+    that is roughly one false positive expected *by construction*, so an uncorrected
+    "significant" cell in Table 1 means very little. BH controls the expected share
+    of false discoveries among the rejected hypotheses, which is the right error
+    rate for a screening table like this one (Bonferroni would be correct but far
+    too conservative across a correlated dose-response family).
+
+    Returns a list of dicts aligned with the input, each with the adjusted q-value
+    and whether it survives at `alpha`. None p-values pass through as None.
+    """
+    indexed = [(i, p) for i, p in enumerate(pvalues) if p is not None]
+    out = [None] * len(pvalues)
+    if not indexed:
+        return out
+
+    indexed.sort(key=lambda x: x[1])
+    m = len(indexed)
+
+    # Step-up: walk from the largest p down, keeping a running minimum so the
+    # adjusted values are monotone.
+    running_min = 1.0
+    adjusted = {}
+    for rank in range(m, 0, -1):
+        i, p = indexed[rank - 1]
+        running_min = min(running_min, p * m / rank)
+        adjusted[i] = min(running_min, 1.0)
+
+    for i, q in adjusted.items():
+        out[i] = {"q_value": round(q, 4), "significant_fdr": q <= alpha}
+    return out
+
+
+def apply_fdr(comparisons, alpha=0.05):
+    """Annotate a {name: paired_bootstrap_diff result} mapping in place with FDR.
+
+    Comparisons whose interval excluded zero but whose q-value does not survive
+    are exactly the ones that would have been over-claimed.
+    """
+    names = list(comparisons)
+    pvals = [(comparisons[n] or {}).get("p_two_sided") for n in names]
+    for name, adj in zip(names, benjamini_hochberg(pvals, alpha)):
+        if comparisons[name] is not None and adj is not None:
+            comparisons[name].update(adj)
+    return comparisons
+
+
+# --------------------------------------------------------------------------- #
+# Power
+# --------------------------------------------------------------------------- #
+
+_Z = {0.80: 0.8416, 0.90: 1.2816, 0.95: 1.6449}
+_Z_ALPHA_TWO_SIDED = 1.9600  # alpha = 0.05
+
+
+def ci_halfwidth(p, n, z=_Z_ALPHA_TWO_SIDED):
+    """Normal-approximation half-width of a 95% interval for a rate."""
+    if n <= 0:
+        return None
+    return z * (p * (1 - p) / n) ** 0.5
+
+
+def n_for_halfwidth(p, halfwidth, z=_Z_ALPHA_TWO_SIDED):
+    """Items needed for a rate near `p` to be estimated to +/- `halfwidth`."""
+    if halfwidth <= 0:
+        return None
+    return int(round((z ** 2) * p * (1 - p) / (halfwidth ** 2)))
+
+
+def mde_paired_rate(n, discordance=0.25, power=0.80):
+    """Minimum detectable difference between two paired rates.
+
+    Paired binary comparisons are governed by the *discordant* pairs -- items where
+    the two conditions disagree -- not by n alone. `discordance` is the expected
+    share of such pairs; 0.25 is a moderate default and should be replaced with the
+    observed value once the pilot has run.
+    """
+    if n <= 0 or discordance <= 0:
+        return None
+    z_beta = _Z.get(power, _Z[0.80])
+    # McNemar normal approximation: detectable difference in proportions.
+    return (_Z_ALPHA_TWO_SIDED + z_beta) * (discordance / n) ** 0.5
+
+
 def paired_diff_by_qid(rows_a, rows_b, value_fn, drop_invalid=True):
     """Paired bootstrap of `value_fn`, aligned on qid across two conditions.
 

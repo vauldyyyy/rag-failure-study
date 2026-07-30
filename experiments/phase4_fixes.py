@@ -22,7 +22,7 @@ from utils.metrics import ABSTAIN, CORRECT, UNSUPPORTED
 from utils.pipeline import (announce_budget, build_retrieval_cache, common_args,
                             load_dataset, run_condition, run_manifest, save_results)
 from utils.rerank import make_reranker
-from utils.stats import paired_diff_by_qid, rate_with_ci_clustered
+from utils.stats import apply_fdr, paired_diff_by_qid, rate_with_ci_clustered
 
 K = 4
 NOISE_TYPE = noise_mod.RELATED
@@ -91,9 +91,22 @@ def main():
         d_corr = _paired(control, rows, lambda r: 1.0 if r["outcome"] == CORRECT else 0.0)
         conditions[name]["vs_none"] = {"hallucination_rate": d_hall, "correct_rate": d_corr}
 
-        verdict = _verdict(d_hall, d_corr)
-        print(f"  {name:16s}{_fmt(d_hall):>22}{_fmt(d_corr):>22}   {verdict}")
-        conditions[name]["verdict"] = verdict
+        conditions[name]["verdict"] = _verdict(d_hall, d_corr)
+
+    # Four mitigations against one control: correct before declaring a winner.
+    for metric in ("hallucination_rate", "correct_rate"):
+        apply_fdr({name: (conditions[name].get("vs_none") or {}).get(metric)
+                   for name, _, _ in MITIGATIONS[1:]})
+
+    for name, _, _ in MITIGATIONS[1:]:
+        vs = conditions[name]["vs_none"]
+        d_hall, d_corr = vs["hallucination_rate"], vs["correct_rate"]
+        # A mitigation that only looked significant before correction is not one.
+        if d_hall and not d_hall.get("significant_fdr") and conditions[name]["verdict"] == "net win":
+            conditions[name]["verdict"] = "not significant after FDR correction"
+        q = "" if not d_hall else f"  q={d_hall.get('q_value')}"
+        print(f"  {name:16s}{_fmt(d_hall):>22}{_fmt(d_corr):>22}   "
+              f"{conditions[name]['verdict']}{q}")
 
     save_results(f"phase4_fixes_{args.dataset}.json", {
         "manifest": run_manifest(args.dataset, qa_pairs, {
