@@ -153,6 +153,21 @@ def macros(baseline, noise, predict, manifest, synthetic):
 
     if noise:
         conds = noise["conditions"]
+        # Headline numbers for the abstract: the accuracy drop the manipulation
+        # produced, and the bound on the hallucination null it did not.
+        worst = max((c for c in conds if c.startswith("related@")),
+                    key=lambda c: conds[c].get("noise_frac", 0), default=None)
+        if worst:
+            vs = conds[worst].get("vs_clean") or {}
+            d_corr = vs.get("correct_rate") or vs.get("F1")
+            d_hall = vs.get("hallucination_rate")
+            if d_corr and d_corr.get("diff") is not None:
+                out.append(m("deltaCorrect", f"{abs(100 * d_corr['diff']):.1f}"))
+            if d_hall and d_hall.get("hi") is not None:
+                bound = max(abs(d_hall["lo"]), abs(d_hall["hi"]))
+                out.append(m("halluBound", f"{100 * bound:.1f}"))
+            out.append(m("worstNoiseFrac", f"{int(100 * conds[worst].get('noise_frac', 0))}"))
+
         curve = [(f, conds.get(f"related@{int(f * 100)}", {}).get("silent_failure_rate"))
                  for f in (0.25, 0.5, 0.75, 1.0)]
         curve = [(f, v) for f, v in curve if v is not None]

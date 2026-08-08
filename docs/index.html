@@ -1,0 +1,392 @@
+<title>When Retrieval Fails — interim findings</title>
+
+<style>
+  :root {
+    --ground: #F7F8FA;
+    --panel: #FFFFFF;
+    --rule: #DDE1E8;
+    --ink: #1A1F27;
+    --ink-soft: #5A6472;
+    --ink-faint: #8B95A3;
+    --plot: #2B4C7E;
+    --plot-wash: #E8EDF5;
+
+    --ok: #2F6F4F;
+    --abstain: #4A7FA5;
+    --grounded: #B4762A;
+    --unsupported: #A63A2E;
+
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --serif: Charter, "Bitstream Charter", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+
+    --measure: 34rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #11141A;
+      --panel: #171B23;
+      --rule: #2A313D;
+      --ink: #E6E9EF;
+      --ink-soft: #A2ACBB;
+      --ink-faint: #6F7988;
+      --plot: #7FA6D9;
+      --plot-wash: #1C2432;
+
+      --ok: #5FA37E;
+      --abstain: #7FAFD4;
+      --grounded: #D3A059;
+      --unsupported: #D97567;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #11141A;
+    --panel: #171B23;
+    --rule: #2A313D;
+    --ink: #E6E9EF;
+    --ink-soft: #A2ACBB;
+    --ink-faint: #6F7988;
+    --plot: #7FA6D9;
+    --plot-wash: #1C2432;
+    --ok: #5FA37E;
+    --abstain: #7FAFD4;
+    --grounded: #D3A059;
+    --unsupported: #D97567;
+  }
+
+  :root[data-theme="light"] {
+    --ground: #F7F8FA;
+    --panel: #FFFFFF;
+    --rule: #DDE1E8;
+    --ink: #1A1F27;
+    --ink-soft: #5A6472;
+    --ink-faint: #8B95A3;
+    --plot: #2B4C7E;
+    --plot-wash: #E8EDF5;
+    --ok: #2F6F4F;
+    --abstain: #4A7FA5;
+    --grounded: #B4762A;
+    --unsupported: #A63A2E;
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 60rem;
+    margin: 0 auto;
+    padding: 3.5rem 1.5rem 5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 3.25rem;
+  }
+
+  h1, h2, h3 { font-family: var(--sans); text-wrap: balance; margin: 0; }
+  h1 { font-size: clamp(1.9rem, 4vw, 2.6rem); line-height: 1.12; letter-spacing: -0.021em; font-weight: 640; }
+  h2 { font-size: 1.28rem; letter-spacing: -0.011em; font-weight: 620; }
+  h3 { font-size: 1rem; letter-spacing: -0.005em; font-weight: 620; }
+  p { margin: 0; max-width: var(--measure); }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  .lede { color: var(--ink-soft); font-size: 1.06rem; }
+
+  header { display: flex; flex-direction: column; gap: 0.9rem; }
+
+  .status-strip {
+    display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;
+    font-family: var(--mono); font-size: 0.73rem;
+  }
+  .chip {
+    border: 1px solid var(--rule); border-radius: 2px;
+    padding: 0.2rem 0.5rem; color: var(--ink-soft);
+    background: var(--panel);
+  }
+  .chip.live { border-color: var(--plot); color: var(--plot); }
+
+  section { display: flex; flex-direction: column; gap: 1.1rem; }
+
+  /* ---- headline result ---- */
+  .verdict {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--plot);
+    padding: 1.6rem 1.75rem;
+    display: grid;
+    gap: 1.4rem;
+    grid-template-columns: 1fr;
+  }
+  @media (min-width: 46rem) { .verdict { grid-template-columns: 1.15fr 1fr; align-items: center; } }
+
+  .verdict-claim { font-size: 1.22rem; line-height: 1.45; }
+  .verdict-claim strong { font-weight: 600; }
+
+  .readout { display: flex; flex-direction: column; gap: 0.85rem; }
+  .readout-row { display: flex; flex-direction: column; gap: 0.15rem; }
+  .readout-label { font-family: var(--mono); font-size: 0.69rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); }
+  .readout-value {
+    font-family: var(--mono); font-size: 1.42rem; font-weight: 600;
+    font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
+  }
+  .readout-value.flat { color: var(--plot); }
+  .readout-note { font-family: var(--mono); font-size: 0.73rem; color: var(--ink-soft); }
+
+  /* ---- legend ---- */
+  .legend { display: flex; flex-wrap: wrap; gap: 0.35rem 1.15rem; font-family: var(--mono); font-size: 0.74rem; }
+  .legend span { display: inline-flex; align-items: center; gap: 0.42rem; color: var(--ink-soft); }
+  .swatch { width: 0.72rem; height: 0.72rem; border-radius: 1px; flex: none; }
+
+  /* ---- stacked bars ---- */
+  .chart { display: flex; flex-direction: column; gap: 0.65rem; }
+  .bar-row { display: grid; grid-template-columns: 4.4rem 1fr; gap: 0.85rem; align-items: center; }
+  .bar-label { font-family: var(--mono); font-size: 0.78rem; color: var(--ink-soft); text-align: right; font-variant-numeric: tabular-nums; }
+  .bar { display: flex; height: 2.15rem; border-radius: 2px; overflow: hidden; border: 1px solid var(--rule); }
+  .seg { display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 0.72rem; font-weight: 600; color: #fff; transition: filter .15s ease; }
+  .seg:hover { filter: brightness(1.12); }
+  .seg.c { background: var(--ok); }
+  .seg.a { background: var(--abstain); }
+  .seg.g { background: var(--grounded); }
+  .seg.u { background: var(--unsupported); }
+  .seg small { font-size: 0.72rem; }
+
+  .axis-note { font-family: var(--mono); font-size: 0.72rem; color: var(--ink-faint); padding-left: 5.25rem; }
+
+  /* ---- accounting ---- */
+  .ledger {
+    font-family: var(--mono);
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    padding: 1.25rem 1.4rem;
+    display: flex; flex-direction: column; gap: 0.55rem;
+    font-size: 0.86rem;
+    overflow-x: auto;
+  }
+  .ledger-line { display: flex; align-items: baseline; gap: 0.7rem; white-space: nowrap; }
+  .ledger-num { font-weight: 650; font-variant-numeric: tabular-nums; min-width: 3.2rem; text-align: right; }
+  .ledger-rule { border-top: 1px solid var(--rule); margin: 0.25rem 0; }
+  .n-ok { color: var(--ok); } .n-a { color: var(--abstain); }
+  .n-g { color: var(--grounded); } .n-u { color: var(--unsupported); }
+
+  /* ---- table ---- */
+  .table-scroll { overflow-x: auto; border: 1px solid var(--rule); background: var(--panel); }
+  table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+  th, td { padding: 0.6rem 0.85rem; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--rule); }
+  th { font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); font-weight: 500; }
+  th:first-child, td:first-child { text-align: left; }
+  tbody tr:last-child td { border-bottom: none; }
+  .null-cell { color: var(--plot); font-weight: 650; }
+
+  /* ---- notes ---- */
+  .grid-2 { display: grid; gap: 1.4rem; grid-template-columns: 1fr; }
+  @media (min-width: 46rem) { .grid-2 { grid-template-columns: 1fr 1fr; } }
+  .note { background: var(--panel); border: 1px solid var(--rule); padding: 1.15rem 1.3rem; display: flex; flex-direction: column; gap: 0.5rem; }
+  .note p { font-size: 0.94rem; color: var(--ink-soft); }
+  .note ul { margin: 0; padding-left: 1.1rem; color: var(--ink-soft); font-size: 0.94rem; display: flex; flex-direction: column; gap: 0.35rem; }
+
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--plot-wash); padding: 0.08em 0.32em; border-radius: 2px; }
+
+  footer { border-top: 1px solid var(--rule); padding-top: 1.25rem; color: var(--ink-faint); font-family: var(--mono); font-size: 0.74rem; display: flex; flex-direction: column; gap: 0.4rem; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Interim findings · SQuAD v2 · n=150 per condition</div>
+    <h1>Degrading retrieval did not increase hallucination</h1>
+    <p class="lede">A controlled study of what a retrieval-augmented system does when its
+      evidence gets worse. Accuracy fell by 12 points. Fabrication did not move at all.</p>
+    <div class="status-strip">
+      <span class="chip live">Study in progress</span>
+      <span class="chip">4 of 5 noise levels collected</span>
+      <span class="chip">0 invalid generations</span>
+      <span class="chip">Hypotheses preregistered</span>
+    </div>
+  </header>
+
+  <section>
+    <div class="verdict">
+      <div class="verdict-claim">
+        As the share of the context window filled with plausible-but-wrong passages rose
+        from 0% to 75%, correct answers fell from 96 to 78 of 150.
+        <strong>Unsupported assertions stayed at 7, 6, 7, 7.</strong>
+      </div>
+      <div class="readout">
+        <div class="readout-row">
+          <span class="readout-label">Δ accuracy at 75% corruption</span>
+          <span class="readout-value">−12.0 pts</span>
+          <span class="readout-note">[−18.0, −7.3] · p &lt; 0.0001</span>
+        </div>
+        <div class="readout-row">
+          <span class="readout-label">Δ hallucination at 75% corruption</span>
+          <span class="readout-value flat">±0.0 pts</span>
+          <span class="readout-note">[−2.7, +2.7] · p = 1.00</span>
+        </div>
+      </div>
+    </div>
+    <p>Both figures are paired bootstraps over the same 150 questions, so per-question
+      difficulty cancels. The hallucination result is not a weak trend — it is a null
+      bounded within ±2.7 points, measured against an accuracy collapse four times that size.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Outcome composition</div>
+    <h2>Where the answers went as evidence degraded</h2>
+
+    <div class="legend">
+      <span><i class="swatch" style="background:var(--ok)"></i>Correct</span>
+      <span><i class="swatch" style="background:var(--abstain)"></i>Abstained — safe failure</span>
+      <span><i class="swatch" style="background:var(--grounded)"></i>Wrong but faithful to context</span>
+      <span><i class="swatch" style="background:var(--unsupported)"></i>Unsupported assertion</span>
+    </div>
+
+    <div class="chart">
+      <div class="bar-row">
+        <span class="bar-label">0%</span>
+        <div class="bar">
+          <div class="seg c" style="width:64.0%" title="Correct: 96">96</div>
+          <div class="seg a" style="width:29.3%" title="Abstained: 44">44</div>
+          <div class="seg g" style="width:2.0%"  title="Wrong but grounded: 3"></div>
+          <div class="seg u" style="width:4.7%"  title="Unsupported: 7"><small>7</small></div>
+        </div>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">25%</span>
+        <div class="bar">
+          <div class="seg c" style="width:60.7%" title="Correct: 91">91</div>
+          <div class="seg a" style="width:31.3%" title="Abstained: 47">47</div>
+          <div class="seg g" style="width:4.0%"  title="Wrong but grounded: 6"></div>
+          <div class="seg u" style="width:4.0%"  title="Unsupported: 6"><small>6</small></div>
+        </div>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">50%</span>
+        <div class="bar">
+          <div class="seg c" style="width:57.3%" title="Correct: 86">86</div>
+          <div class="seg a" style="width:33.3%" title="Abstained: 50">50</div>
+          <div class="seg g" style="width:4.7%"  title="Wrong but grounded: 7"></div>
+          <div class="seg u" style="width:4.7%"  title="Unsupported: 7"><small>7</small></div>
+        </div>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">75%</span>
+        <div class="bar">
+          <div class="seg c" style="width:52.0%" title="Correct: 78">78</div>
+          <div class="seg a" style="width:38.0%" title="Abstained: 57">57</div>
+          <div class="seg g" style="width:5.3%"  title="Wrong but grounded: 8"></div>
+          <div class="seg u" style="width:4.7%"  title="Unsupported: 7"><small>7</small></div>
+        </div>
+      </div>
+      <div class="axis-note">share of context window replaced with related-but-wrong passages →</div>
+    </div>
+
+    <p>The green band shrinks and the blue band grows. The red band — the only failure
+      mode that misleads a user — is the same width in every row.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Accounting</div>
+    <h2>The 18 correct answers that were lost</h2>
+    <div class="ledger">
+      <div class="ledger-line"><span class="ledger-num n-ok">−18</span><span>correct answers lost between 0% and 75% corruption</span></div>
+      <div class="ledger-rule"></div>
+      <div class="ledger-line"><span class="ledger-num n-a">+13</span><span>became abstentions <em>— the system said it could not answer</em></span></div>
+      <div class="ledger-line"><span class="ledger-num n-g">+5</span><span>became wrong-but-grounded <em>— it faithfully reported the bad passage</em></span></div>
+      <div class="ledger-line"><span class="ledger-num n-u">0</span><span>became fabrications</span></div>
+    </div>
+    <p>This is invisible to any analysis that scores answers as merely right or wrong.
+      A pooled report says failures rose from 54 to 72 and stops. Separating an unsupported
+      assertion from a faithful report of bad evidence is what makes the null visible —
+      and that separation was the study's central design decision.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Full measurements</div>
+    <h2>Paired against the clean condition, same 150 questions</h2>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Corruption</th><th>Gold in context</th><th>Correct</th>
+            <th>Abstained</th><th>Unsupported</th><th>Δ correct</th><th>Δ unsupported</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>0% (control)</td><td>0.840</td><td>0.640</td><td>0.293</td><td>0.047</td><td>—</td><td>—</td></tr>
+          <tr><td>25%</td><td>0.807</td><td>0.607</td><td>0.313</td><td>0.040</td><td>−0.033 <small>p=.017</small></td><td class="null-cell">−0.007 <small>p=.72</small></td></tr>
+          <tr><td>50%</td><td>0.760</td><td>0.573</td><td>0.333</td><td>0.047</td><td>−0.067 <small>p&lt;.001</small></td><td class="null-cell">+0.000 <small>p=1.0</small></td></tr>
+          <tr><td>75%</td><td>0.647</td><td>0.520</td><td>0.380</td><td>0.047</td><td>−0.120 <small>p&lt;.001</small></td><td class="null-cell">+0.000 <small>p=1.0</small></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Every rate carries a 95% bootstrap interval in the underlying results files.
+      Comparisons are Benjamini–Hochberg corrected across the condition family.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Integrity</div>
+    <h2>What this does not show</h2>
+    <div class="grid-2">
+      <div class="note">
+        <h3>The preregistered hypothesis failed</h3>
+        <p>We predicted silent failure would peak at partial corruption. Observed:
+          0.185, 0.203, 0.219, 0.208 — an interior bump, but with intervals of
+          [0.09, 0.30] and [0.12, 0.33] that overlap completely. A power analysis run
+          <em>before</em> data collection said separating a peak at n=150 needs a gap
+          above 16 points. The observed spread is 3. Reported as unsupported.</p>
+      </div>
+      <div class="note">
+        <h3>Bounds on the claim</h3>
+        <ul>
+          <li>One generator, one retriever, one noise type</li>
+          <li>n=150; unsupported counts of 6–7 make the <em>level</em> imprecise even though the <em>difference</em> is tight</li>
+          <li>The 100% corruption condition has not run yet</li>
+          <li>Perturbations are synthetic; a manipulation check against naturally failed retrievals is pending</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Method</div>
+    <h2>How it was measured</h2>
+    <p>600 SQuAD v2 questions (70% answerable / 30% unanswerable, seed 20240617) over a
+      1,330-chunk corpus built from all 1,204 development paragraphs. Corruption is applied
+      to the context handed to the generator, never to the shared index — so the dose each
+      individual answer received is exact and known, which a poisoned index cannot give you.</p>
+    <p>Generation and judging use different models, so faithfulness verdicts are not
+      self-evaluation. Retrieval runs locally, making that half of the pipeline reproducible
+      without an API key.</p>
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><td>Generator</td><td style="text-align:left"><code>gemini-3.5-flash-lite</code>, temperature 0</td></tr>
+          <tr><td>Judge</td><td style="text-align:left"><code>gemini-3.1-flash-lite</code> — different model, <code>self_eval: false</code></td></tr>
+          <tr><td>Retriever</td><td style="text-align:left"><code>all-MiniLM-L6-v2</code>, exact inner product over FAISS</td></tr>
+          <tr><td>Statistics</td><td style="text-align:left">Paired bootstrap, 2000 resamples, clustered by question</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <div>Interim results — the study is still collecting. Numbers on this page are generated from committed results files, not transcribed by hand.</div>
+    <div>github.com/vauldyyyy/rag-failure-study</div>
+  </footer>
+
+</div>

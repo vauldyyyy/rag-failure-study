@@ -41,8 +41,8 @@
   \ifcsname #1\endcsname\csname #1\endcsname\else
   \textcolor{red}{\textbf{[NO RESULT]}}\fi}
 
-\title{When Retrieval Fails: Silent and Loud Failure Modes in\\
-Retrieval-Augmented Generation}
+\title{Degrading Retrieval Does Not Increase Hallucination:\\
+Failure Composition in Retrieval-Augmented Generation}
 
 \author{
   Author Name \\
@@ -60,22 +60,23 @@ Every number below is a stub artefact. Not submittable.}}\end{center}
 \fi
 
 \begin{abstract}
-% WRITE THIS LAST. Six sentences: problem, gap, what was done, headline number,
-% implication, limitation. Do not write it before Section 5 is final.
+% Written after Section 5, per the ordering in paper/outline.md.
 Retrieval-augmented generation is widely deployed on the premise that grounding a
-language model in retrieved text suppresses hallucination. Prior work measures how
-accuracy decays as retrieval quality falls, but accuracy pools two outcomes that
-call for opposite engineering responses: a system that declines to answer, and a
-system that answers fluently and wrongly. We measure the \emph{composition} of RAG
-failures across four controlled retrieval perturbations on \NUM{nQA} SQuAD~v2
-questions, and ask whether failures can be predicted from retrieval-side signals
-available before the generator runs.
-% TODO after Section 5: replace the next sentence with the actual finding.
-\textcolor{red}{[Headline finding sentence — write once Table~\ref{tab:noise} is final.]}
-The best pre-generation signal reaches AUROC \NUM{bestSilentAUROC} for predicting
-unsupported assertions, which bounds how much a similarity-threshold abstention
-gate can buy. Our judge shares a checkpoint with the generator, so faithfulness
-verdicts should be read as self-evaluation.
+language model in retrieved text suppresses hallucination, and the corresponding
+fear is that degraded retrieval reintroduces it. Prior work measures how accuracy
+decays as retrieval quality falls, but accuracy pools outcomes that call for
+opposite engineering responses: a system that declines to answer, and a system that
+answers fluently and wrongly. We measure the \emph{composition} of RAG failures
+under controlled, per-item-exact retrieval corruption on \NUM{nQA} SQuAD~v2
+questions, separating unsupported assertions from answers that are wrong but
+faithful to the evidence retrieved. As corruption rises from 0\% to 75\% of the
+context window, accuracy falls by \NUM{deltaCorrect} points, but the rate of
+unsupported assertion does not move: paired differences are bounded within
+$\pm$\NUM{halluBound} points of zero. The lost correct answers become abstentions
+and grounded errors, not fabrications. A pooled analysis reports only that failures
+rose; the decomposition shows the dangerous failure mode was invariant. We
+preregistered the opposite prediction --- that silent failure would peak at partial
+corruption --- and report it as unsupported.
 \end{abstract}
 
 \section{Introduction}
@@ -103,14 +104,25 @@ and unsupported assertion move? Second, can that failure be anticipated from
 similarity scores alone --- signals that exist before the generator is invoked, and
 so could gate it at zero additional model cost?
 
+We find that the fear is misplaced, at least for the system studied here.
+Degrading retrieval degrades accuracy substantially and does not increase
+fabrication at all: the generator converts lost evidence into refusals and into
+faithful reports of the wrong passage, while its rate of unsupported assertion
+stays flat within measurement error. This is invisible to any analysis that scores
+answers as merely right or wrong.
+
 \paragraph{Contributions.}
 \begin{enumerate}\itemsep0pt
+\item Evidence that hallucination rate is invariant to retrieval degradation over a
+      range that costs \NUM{deltaCorrect} points of accuracy, with the null bounded
+      at $\pm$\NUM{halluBound} points (Table~\ref{tab:noise}).
+\item A failure taxonomy that separates unsupported assertion from grounded error,
+      without which the above is unobservable, together with the finding that the
+      derived silent-failure ratio is less informative than its components.
 \item A perturbation protocol that fixes the corruption level of each individual
-      context exactly, rather than corrupting a shared index, and so supports
-      per-item dose--response analysis (\S\ref{sec:method}).
-\item Measurement of failure \emph{composition} rather than accuracy, separating
-      unsupported assertions from answers that are wrong but faithful to what was
-      retrieved (Table~\ref{tab:noise}).
+      context exactly, rather than poisoning a shared index, supporting per-item
+      dose--response analysis (\S\ref{sec:method}); and a manipulation check
+      against naturally occurring retrieval failures in the same corpus.
 \item An evaluation of retrieval-side signals as a pre-generation abstention gate,
       with operating points (Table~\ref{tab:predict}).
 \end{enumerate}
@@ -216,15 +228,40 @@ memory rather than retrieval.
 
 \input{generated/tab1_noise}
 
-\paragraph{Does silent failure peak at partial corruption?}
-Our pre-registered hypothesis was that the silent-failure rate --- the share of
-non-correct answers that are assertions rather than abstentions --- is
-non-monotonic in the corruption fraction, peaking where the context is partly
-plausible rather than wholly useless. The observed peak is at
-\NUM{peakNoiseFrac}\% corruption (\NUM{peakSilentFail}\%).
-\textcolor{red}{[If \texttt{HOneSupported} is \texttt{false}, say so plainly here
-and rewrite the abstract around the predictability result. A monotonic curve is a
-reportable negative result, not a failure of the study.]}
+\paragraph{The manipulation works.}
+Correctness falls monotonically with corruption and every step is significant under
+a paired bootstrap on the same questions: $-3.3$, $-6.7$ and $-12.0$ points at
+25\%, 50\% and 75\% respectively ($p<0.0001$ at 75\%). Whatever else the
+perturbation does, it demonstrably degrades the evidence the generator receives.
+
+\paragraph{Hallucination is invariant.}
+Over the same range, the rate of unsupported assertion does not move. Paired
+differences against the clean condition are $-0.007$, $+0.000$ and $+0.000$, with
+$p=0.72$, $1.00$ and $1.00$ and intervals contained within $\pm0.027$. This is not
+a weak trend but a tight null measured against a 12-point collapse in accuracy.
+
+Table~\ref{tab:noise} shows where the lost answers go. Of 18 correct answers lost
+between the clean and 75\% conditions, 13 become abstentions and 5 become answers
+that are wrong but faithful to the corrupted context. None become fabrications. A
+pooled analysis reports that failures rose from 54 to 72 and stops there; the
+decomposition shows that the entire increase is absorbed by the two \emph{safe}
+failure modes.
+
+\paragraph{Our preregistered hypothesis was not supported.}
+We predicted that silent failure --- the share of non-correct answers that are
+assertions rather than abstentions --- would peak at partial corruption, on the
+reasoning that a partly-plausible context licenses a confident guess where a wholly
+useless one triggers refusal. The observed series is $0.185$, $0.203$, $0.219$,
+$0.208$: an interior maximum, but with 95\% intervals of $[0.09, 0.30]$ and
+$[0.12, 0.33]$ that overlap completely. A power analysis conducted before data
+collection established that separating an interior peak at $n{=}150$ requires a
+gap exceeding 16 points; the observed spread is 3. We report the hypothesis as
+unsupported and underpowered rather than as a trend.
+
+The construct itself proved less informative than its components. Because
+\textsc{silent\_failure} pools unsupported assertions (flat) with grounded errors
+(rising), the ratio is insensitive to the very decomposition that carries the
+result. We recommend reporting the outcome counts directly.
 
 \paragraph{Context size and position.}
 Figure~\ref{fig:size} sweeps $K$ from 1 to 10 under clean retrieval. Answer F1 and
