@@ -64,6 +64,8 @@ def main():
         size_conditions[name], size_rows[name] = summary, rows
         print(f"  K={k:>2}: F1={summary.get('F1')} P@K={summary.get('gold_in_context_rate')} "
               f"abstain={summary.get('abstention_rate')} halluc={summary.get('hallucination_rate')}")
+        # Written after every K so a quota-interrupted sweep still yields a figure.
+        _write(args, qa_pairs, size_conditions, {}, size_rows, {}, 0)
 
     # ---- (b) gold position at fixed K ------------------------------------- #
     eligible = [qa for qa in qa_pairs
@@ -86,6 +88,8 @@ def main():
         pos_conditions[name], pos_rows[name] = summary, rows
         print(f"  gold at slot {pos}: F1={summary.get('F1')} "
               f"correct={summary['ci']['correct_rate']['mean']}")
+        _write(args, qa_pairs, size_conditions, pos_conditions, size_rows, pos_rows,
+               len(eligible))
 
     first = pos_rows.get(f"pos={POSITIONS[0]}")
     middle = pos_rows.get(f"pos={POSITIONS[1]}")
@@ -98,10 +102,20 @@ def main():
         else:
             print("  -> no significant position effect at this n")
 
+    _write(args, qa_pairs, size_conditions, pos_conditions, size_rows, pos_rows,
+           len(eligible))
+
+
+def _write(args, qa_pairs, size_conditions, pos_conditions, size_rows, pos_rows,
+           n_eligible):
     save_results(f"phase2c_context_{args.dataset}.json", {
         "manifest": run_manifest(args.dataset, qa_pairs, {
             "k_values": K_VALUES, "position_k": POSITION_K, "positions": POSITIONS,
-            "n_position_eligible": len(eligible),
+            "n_position_eligible": n_eligible,
+            "k_collected": len(size_conditions),
+            "positions_collected": len(pos_conditions),
+            "complete": (len(size_conditions) == len(K_VALUES)
+                         and len(pos_conditions) == len(POSITIONS)),
         }),
         "size_conditions": size_conditions,
         "position_conditions": pos_conditions,

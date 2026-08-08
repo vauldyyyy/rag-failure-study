@@ -83,6 +83,19 @@ def main():
         print(f"  {name:15s} halluc={summary.get('hallucination_rate')} "
               f"abstain={summary.get('abstention_rate')} F1={summary.get('F1')}")
 
+        # Persist after every mitigation. On free-tier quota this phase spans days;
+        # writing only at the end means a partial run yields no results file and so
+        # no figure, despite the rows being on disk.
+        save_results(f"phase4_fixes_{args.dataset}.json", {
+            "manifest": run_manifest(args.dataset, qa_pairs, {
+                "k": K, "noise_type": NOISE_TYPE, "noise_frac": NOISE_FRAC,
+                "mitigations": [m[0] for m in MITIGATIONS],
+                "mitigations_collected": len(conditions),
+                "complete": len(conditions) == len(MITIGATIONS),
+            }),
+            "conditions": conditions, "rows": all_rows,
+        })
+
     control = all_rows["none"]
     print("\nTrade-off vs no mitigation (paired, 95% CI):")
     print(f"  {'mitigation':16s}{'d halluc':>22}{'d correct':>22}   verdict")
