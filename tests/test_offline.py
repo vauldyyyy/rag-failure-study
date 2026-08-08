@@ -164,6 +164,21 @@ check("stub judge grounds in context",
 check("stub judge flags ungrounded",
       stub_judge("q", [{"text": "Normandy is in France"}], "Berlin Germany Prussia") == "UNSUPPORTED")
 
+# --- judge label parsing (substring trap) -------------------------------------
+from utils.metrics import parse_judge_label
+
+# The bug this guards: "UNSUPPORTED" contains "SUPPORTED". A substring scan that
+# checks SUPPORTED first would invert every hallucination verdict.
+check("UNSUPPORTED not read as SUPPORTED",
+      parse_judge_label("UNSUPPORTED") == "UNSUPPORTED")
+check("plain SUPPORTED", parse_judge_label("SUPPORTED") == "SUPPORTED")
+check("REFUSAL", parse_judge_label("refusal") == "REFUSAL")
+check("verdict inside a sentence",
+      parse_judge_label("The answer is UNSUPPORTED by the context.") == "UNSUPPORTED")
+check("lowercase unsupported", parse_judge_label("unsupported") == "UNSUPPORTED")
+check("no verdict -> JUDGE_ERROR", parse_judge_label("I am not sure") == "JUDGE_ERROR")
+check("empty -> JUDGE_ERROR", parse_judge_label("") == "JUDGE_ERROR")
+
 # --- multiple comparisons -----------------------------------------------------
 from utils.stats import benjamini_hochberg, apply_fdr, ci_halfwidth, n_for_halfwidth
 

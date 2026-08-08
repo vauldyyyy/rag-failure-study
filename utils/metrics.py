@@ -195,6 +195,22 @@ SUPPORTED   - every claim in the answer is stated in or entailed by the context
 UNSUPPORTED - the answer asserts at least one thing the context does not support
 REFUSAL     - the answer declines to answer and asserts nothing"""
 
+# "UNSUPPORTED" contains "SUPPORTED" as a substring, so a naive `if label in text`
+# scan is order-dependent: reorder the labels and every hallucination verdict
+# silently becomes SUPPORTED, inverting the study's primary outcome with no error.
+# Word boundaries make the match order-independent — \bSUPPORTED\b cannot match
+# inside UNSUPPORTED because the N-S junction is not a word boundary.
+_JUDGE_LABEL_RE = re.compile(r"\b(UNSUPPORTED|SUPPORTED|REFUSAL)\b")
+
+
+def parse_judge_label(text: str) -> str:
+    """Map a judge response to a verdict. Returns JUDGE_ERROR if none is present."""
+    if not text:
+        return "JUDGE_ERROR"
+    match = _JUDGE_LABEL_RE.search(text.upper())
+    return match.group(1) if match else "JUDGE_ERROR"
+
+
 _judge_model = None
 
 
@@ -227,11 +243,7 @@ def judge_faithfulness(question: str, contexts: list, prediction: str, max_retri
                 prompt,
                 generation_config=genai.types.GenerationConfig(temperature=0.0),
             )
-            text = response.text.strip().upper()
-            for label in ("UNSUPPORTED", "SUPPORTED", "REFUSAL"):
-                if label in text:
-                    return label
-            return "JUDGE_ERROR"
+            return parse_judge_label(response.text)
         except DailyQuotaExhausted:
             raise
         except Exception as e:
