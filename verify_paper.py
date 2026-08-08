@@ -149,9 +149,13 @@ def check_figures(tex):
 def check_placeholders(tex):
     for match in re.finditer(r"\\textcolor\{red\}\{\[([^\]]{0,80})", tex):
         fail("placeholder", f"unresolved author note: [{match.group(1).strip()}...]")
-    for marker in ("Author Name", "email@example.com", "Affiliation"):
+    # Template markers only — never the author's real details. Kept explicit so
+    # filling the author block actually clears the check instead of tripping it.
+    for marker in ("Author Name", "email@example.com", "YOUR_INSTITUTION",
+                   "YOUR\\_INSTITUTION", "Your Name"):
         if marker in tex:
-            fail("placeholder", f"template text '{marker}' still present.")
+            fail("placeholder", f"template text '{marker}' still present — "
+                                f"fill in the author block.")
 
 
 # --------------------------------------------------------------------------- #
