@@ -155,18 +155,38 @@ def macros(baseline, noise, predict, manifest, synthetic):
         conds = noise["conditions"]
         # Headline numbers for the abstract: the accuracy drop the manipulation
         # produced, and the bound on the hallucination null it did not.
-        worst = max((c for c in conds if c.startswith("related@")),
-                    key=lambda c: conds[c].get("noise_frac", 0), default=None)
-        if worst:
-            vs = conds[worst].get("vs_clean") or {}
+        # Read the fraction from the condition name rather than the summary field.
+        # A results file rebuilt from checkpoints may not carry noise_frac, and
+        # defaulting it to 0 silently selects the *mildest* condition -- which would
+        # put the 25% accuracy drop in an abstract that describes the 75% range.
+        def _frac(name):
+            try:
+                return int(name.split("@")[1])
+            except (IndexError, ValueError):
+                return -1
+
+        # Two regimes need separate numbers. Through partial corruption the
+        # hallucination rate is flat; at total corruption it falls while abstention
+        # jumps. Collapsing them into one "worst condition" figure would put a
+        # decrease behind a symmetric +/- bound and misdescribe the result.
+        for label, cond in (("Partial", "related@75"), ("Total", "related@100")):
+            if cond not in conds:
+                continue
+            vs = conds[cond].get("vs_clean") or {}
             d_corr = vs.get("correct_rate") or vs.get("F1")
             d_hall = vs.get("hallucination_rate")
+            d_abst = vs.get("abstention_rate")
             if d_corr and d_corr.get("diff") is not None:
-                out.append(m("deltaCorrect", f"{abs(100 * d_corr['diff']):.1f}"))
+                out.append(m(f"deltaCorrect{label}", f"{abs(100 * d_corr['diff']):.1f}"))
             if d_hall and d_hall.get("hi") is not None:
-                bound = max(abs(d_hall["lo"]), abs(d_hall["hi"]))
-                out.append(m("halluBound", f"{100 * bound:.1f}"))
-            out.append(m("worstNoiseFrac", f"{int(100 * conds[worst].get('noise_frac', 0))}"))
+                out.append(m(f"halluBound{label}",
+                             f"{100 * max(abs(d_hall['lo']), abs(d_hall['hi'])):.1f}"))
+                out.append(m(f"deltaHallu{label}", f"{100 * d_hall['diff']:+.1f}"))
+            if d_abst and d_abst.get("diff") is not None:
+                out.append(m(f"deltaAbstain{label}", f"{100 * d_abst['diff']:+.1f}"))
+            if conds[cond].get("ci", {}).get("abstention_rate", {}).get("mean") is not None:
+                out.append(m(f"abstainAt{label}",
+                             f"{100 * conds[cond]['ci']['abstention_rate']['mean']:.0f}"))
 
         curve = [(f, conds.get(f"related@{int(f * 100)}", {}).get("silent_failure_rate"))
                  for f in (0.25, 0.5, 0.75, 1.0)]

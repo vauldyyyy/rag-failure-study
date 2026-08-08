@@ -1,8 +1,9 @@
 {
-  "n_rows": 625,
+  "n_rows": 882,
   "conditions": [
     "baseline",
     "clean",
+    "related@100",
     "related@25",
     "related@50",
     "related@75"
@@ -74,7 +75,46 @@
         "n": 33
       }
     },
-    "synthetic": null
+    "synthetic": {
+      "n": 132,
+      "CORRECT": {
+        "mean": 0.0076,
+        "lo": 0.0,
+        "hi": 0.0227,
+        "n": 132
+      },
+      "ABSTAIN": {
+        "mean": 0.9242,
+        "lo": 0.8786,
+        "hi": 0.9621,
+        "n": 132
+      },
+      "UNSUPPORTED": {
+        "mean": 0.0076,
+        "lo": 0.0,
+        "hi": 0.0227,
+        "n": 132
+      },
+      "INCORRECT_GROUNDED": {
+        "mean": 0.0606,
+        "lo": 0.0227,
+        "hi": 0.1061,
+        "n": 132
+      },
+      "silent_failure_rate": {
+        "mean": 0.0687,
+        "lo": 0.0305,
+        "hi": 0.1145,
+        "n": 131
+      }
+    },
+    "interval_overlap": {
+      "CORRECT": true,
+      "ABSTAIN": true,
+      "UNSUPPORTED": true,
+      "INCORRECT_GROUNDED": true,
+      "silent_failure_rate": true
+    }
   },
   "observational_dose_response": [
     {

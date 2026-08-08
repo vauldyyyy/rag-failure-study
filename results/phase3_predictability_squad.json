@@ -1,0 +1,149 @@
+{
+  "n_rows": 882,
+  "targets": {
+    "any_failure": {
+      "base_rate": 0.4966,
+      "auroc": {
+        "top1_score": 0.7477,
+        "mean_score": 0.6505,
+        "min_score": 0.5828,
+        "score_margin": 0.6554,
+        "score_spread": 0.7704
+      },
+      "best_signal": "score_spread",
+      "best_auroc": 0.7704,
+      "threshold_table": [
+        {
+          "threshold": 0.0271,
+          "kept_frac": 0.9002,
+          "failure_rate_kept": 0.4484,
+          "failure_rate_dropped": 0.9318
+        },
+        {
+          "threshold": 0.0551,
+          "kept_frac": 0.7506,
+          "failure_rate_kept": 0.3671,
+          "failure_rate_dropped": 0.8864
+        },
+        {
+          "threshold": 0.1076,
+          "kept_frac": 0.5011,
+          "failure_rate_kept": 0.3032,
+          "failure_rate_dropped": 0.6909
+        },
+        {
+          "threshold": 0.1726,
+          "kept_frac": 0.2517,
+          "failure_rate_kept": 0.2928,
+          "failure_rate_dropped": 0.5652
+        },
+        {
+          "threshold": 0.2485,
+          "kept_frac": 0.102,
+          "failure_rate_kept": 0.1778,
+          "failure_rate_dropped": 0.5328
+        }
+      ]
+    },
+    "silent_wrong": {
+      "base_rate": 0.0385,
+      "auroc": {
+        "top1_score": 0.6374,
+        "mean_score": 0.677,
+        "min_score": 0.6867,
+        "score_margin": 0.4565,
+        "score_spread": 0.4522
+      },
+      "best_signal": "min_score",
+      "best_auroc": 0.6867,
+      "threshold_table": [
+        {
+          "threshold": 0.3045,
+          "kept_frac": 0.9002,
+          "failure_rate_kept": 0.034,
+          "failure_rate_dropped": 0.0795
+        },
+        {
+          "threshold": 0.3693,
+          "kept_frac": 0.7506,
+          "failure_rate_kept": 0.0257,
+          "failure_rate_dropped": 0.0773
+        },
+        {
+          "threshold": 0.4406,
+          "kept_frac": 0.5011,
+          "failure_rate_kept": 0.0136,
+          "failure_rate_dropped": 0.0636
+        },
+        {
+          "threshold": 0.5259,
+          "kept_frac": 0.2517,
+          "failure_rate_kept": 0.018,
+          "failure_rate_dropped": 0.0455
+        },
+        {
+          "threshold": 0.5824,
+          "kept_frac": 0.102,
+          "failure_rate_kept": 0.0333,
+          "failure_rate_dropped": 0.0391
+        }
+      ]
+    }
+  },
+  "gate_economics": {
+    "signal": "top1_score",
+    "n": 882,
+    "by_cost_ratio": [
+      {
+        "cost_ratio": 1,
+        "ungated_utility": 0.4649,
+        "best_gated_utility": 0.4649,
+        "optimal_threshold": null,
+        "answered_share": 1.0,
+        "gate_helps": false
+      },
+      {
+        "cost_ratio": 2,
+        "ungated_utility": 0.4263,
+        "best_gated_utility": 0.4263,
+        "optimal_threshold": null,
+        "answered_share": 1.0,
+        "gate_helps": false
+      },
+      {
+        "cost_ratio": 5,
+        "ungated_utility": 0.3107,
+        "best_gated_utility": 0.3379,
+        "optimal_threshold": 0.4446,
+        "answered_share": 0.8311,
+        "gate_helps": true
+      },
+      {
+        "cost_ratio": 10,
+        "ungated_utility": 0.1179,
+        "best_gated_utility": 0.2732,
+        "optimal_threshold": 0.5722,
+        "answered_share": 0.5442,
+        "gate_helps": true
+      },
+      {
+        "cost_ratio": 20,
+        "ungated_utility": -0.2676,
+        "best_gated_utility": 0.2438,
+        "optimal_threshold": 0.6228,
+        "answered_share": 0.3787,
+        "gate_helps": true
+      },
+      {
+        "cost_ratio": 50,
+        "ungated_utility": -1.424,
+        "best_gated_utility": 0.1757,
+        "optimal_threshold": 0.6228,
+        "answered_share": 0.3787,
+        "gate_helps": true
+      }
+    ],
+    "break_even_cost_ratio": 5
+  },
+  "interpretation": "AUROC near 0.5 means retrieval scores carry no usable pre-generation signal; a system cannot gate on them and must fall back to post-hoc verification. AUROC above ~0.7 means an abstention gate is viable and the threshold table gives its operating points. The break-even cost ratio below translates that into a deployment decision."
+}

@@ -69,14 +69,21 @@ opposite engineering responses: a system that declines to answer, and a system t
 answers fluently and wrongly. We measure the \emph{composition} of RAG failures
 under controlled, per-item-exact retrieval corruption on \NUM{nQA} SQuAD~v2
 questions, separating unsupported assertions from answers that are wrong but
-faithful to the evidence retrieved. As corruption rises from 0\% to 75\% of the
-context window, accuracy falls by \NUM{deltaCorrect} points, but the rate of
-unsupported assertion does not move: paired differences are bounded within
-$\pm$\NUM{halluBound} points of zero. The lost correct answers become abstentions
-and grounded errors, not fabrications. A pooled analysis reports only that failures
-rose; the decomposition shows the dangerous failure mode was invariant. We
-preregistered the opposite prediction --- that silent failure would peak at partial
-corruption --- and report it as unsupported.
+faithful to the evidence retrieved. As corruption rises to 75\% of the context
+window, accuracy falls by \NUM{deltaCorrectPartial} points while the rate of
+unsupported assertion does not move at all: paired differences are bounded within
+$\pm$\NUM{halluBoundPartial} points of zero. The lost answers become abstentions and
+grounded errors, not fabrications. When the evidence is removed entirely, abstention
+jumps to \NUM{abstainAtTotal}\% and unsupported assertion falls further. The
+generator therefore distinguishes \emph{no} evidence from \emph{some} evidence, but
+not good evidence from bad: its abstention behaviour is threshold-like rather than
+graded, which is why partial corruption is the costly regime --- not because it
+provokes fabrication, but because it goes undetected. A manipulation check against
+naturally failed retrievals in the same corpus finds the synthetic perturbation
+reproduces unaided retrieval failure on every outcome. Retrieval score carries some
+pre-generation signal (AUROC \NUM{bestSilentAUROC} for unsupported assertion), but a
+cost analysis shows a similarity gate is worth deploying only once a fabrication is
+judged at least five times as costly as a correct answer.
 \end{abstract}
 
 \section{Introduction}
@@ -114,8 +121,9 @@ answers as merely right or wrong.
 \paragraph{Contributions.}
 \begin{enumerate}\itemsep0pt
 \item Evidence that hallucination rate is invariant to retrieval degradation over a
-      range that costs \NUM{deltaCorrect} points of accuracy, with the null bounded
-      at $\pm$\NUM{halluBound} points (Table~\ref{tab:noise}).
+      range that costs \NUM{deltaCorrectPartial} points of accuracy, with the null
+      bounded at $\pm$\NUM{halluBoundPartial} points (Table~\ref{tab:noise}), and
+      evidence that the generator's abstention is threshold-like rather than graded.
 \item A failure taxonomy that separates unsupported assertion from grounded error,
       without which the above is unobservable, together with the finding that the
       derived silent-failure ratio is less informative than its components.
@@ -271,14 +279,36 @@ and the context contents fixed while moving the gold chunk between the first,
 middle and last slot tests \citet{liu2024lost} directly.
 
 \paragraph{Predicting failure before generation.}
-Table~\ref{tab:predict} gives the AUROC of each retrieval-side signal.
+Table~\ref{tab:predict} gives the AUROC of each retrieval-side signal against two
+targets: any non-correct answer, and the narrower case of an unsupported assertion.
 The strongest predictor of an unsupported assertion is \NUM{bestSilentSignal} at
 AUROC \NUM{bestSilentAUROC}.
-\textcolor{red}{[Interpret against 0.5. Below $\approx$0.6, state plainly that a
-similarity-threshold gate is not viable and that post-hoc verification is required
---- that is a useful negative result for practitioners and belongs in the abstract.]}
+
+The practical question is not the AUROC but whether a similarity threshold is worth
+deploying, and that depends on how much worse a fabrication is than a refusal --- a
+property of the application, not of the model. We therefore sweep that cost ratio
+and report the break-even point: the factor by which a hallucination must outweigh a
+correct answer before any threshold beats answering everything. Below an AUROC of
+roughly 0.6 no threshold is viable at any cost ratio, and a system that needs to
+suppress unsupported assertions must verify after generation rather than gate before
+it. That is a useful result for practitioners either way, because the cheap gate is
+the first thing most deployments reach for.
 
 \input{generated/tab2_predictability}
+
+\paragraph{Does the synthetic perturbation reproduce real failure?}
+The study's independent variable is artificial, so the results are only as good as
+the manipulation's correspondence to retrieval that fails on its own. The clean
+condition supplies the control: 53 items whose gold document was simply absent from
+the top-$K$, with no intervention. Comparing those against synthetically
+evidence-free items, the 95\% intervals overlap on every outcome --- correct,
+abstain, unsupported and grounded error alike. In both cases the generator
+overwhelmingly abstains (0.78 natural, 0.92 synthetic) and rarely asserts anything
+unsupported (0.05 and 0.01).
+
+We state this as the weak result it is: overlap at these sample sizes is evidence
+against a large discrepancy, not evidence of equivalence. But it is the check a
+reader is entitled to demand, and it costs nothing beyond data already collected.
 
 \paragraph{Mitigations.}
 Figure~\ref{fig:mitigation} plots each inference-time defence as a pair: change in
@@ -301,7 +331,15 @@ than it discards correct answers. Only the upper-left quadrant is a win.
 \end{figure}
 
 \section{Conclusion}
-\textcolor{red}{[Two sentences, written last, restating only what the tables show.]}
+Across a range of retrieval corruption that costs \NUM{deltaCorrectPartial} points
+of accuracy, the system studied here did not fabricate more; it refused more, and it
+faithfully repeated more of the wrong evidence it was given. Only when the evidence
+was removed outright did it recognise the problem, abstaining on
+\NUM{abstainAtTotal}\% of questions --- which locates the practical risk not in
+fabrication under degraded retrieval but in the generator's inability to tell
+degraded evidence from good. Whether that reflects retrieval-augmented generation in
+general or one instruction-tuned model's disposition toward abstention is the
+obvious next question, and this design answers it by swapping a single argument.
 
 \section*{Limitations}
 % Required at *ACL venues. Reviewers reward candour here; the facts are

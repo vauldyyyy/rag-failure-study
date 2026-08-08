@@ -80,6 +80,12 @@ def main():
         conditions[name], all_rows[name] = summary, rows
         print(f"  {name}: {_line(summary)}")
 
+        # Write after every condition, not only at the end. On free-tier quota this
+        # sweep spans days; a results file that only appears once all ten cells are
+        # done means a partially-collected study produces nothing downstream --
+        # no tables, no figures, no Phase 3 -- despite having the rows on disk.
+        _write(args, conditions, all_rows, partial=True)
+
     # Every noise condition is tested against the same clean control, so this is a
     # family of ~9 comparisons per metric. Uncorrected, one "significant" cell is
     # expected by chance alone. FDR-adjust before anything is called a finding.
@@ -95,8 +101,22 @@ def main():
     print(f"\nFDR (BH, alpha=0.05) over {len(conditions) - 1} comparisons: "
           f"{n_survive} hallucination-rate differences survive correction.")
 
+    _write(args, conditions, all_rows, partial=False)
+    _report_h1(conditions)
+    _report_h2(conditions)
+
+
+def _write(args, conditions, all_rows, partial):
+    """Persist the sweep. `partial` marks a run that has not covered the full grid."""
+    done = [n for n in conditions if n != "clean"]
     save_results(f"phase2b_noise_{args.dataset}.json", {
-        "manifest": run_manifest(args.dataset, qa_pairs, {"k": K, "grid": [list(g) for g in GRID]}),
+        "manifest": run_manifest(args.dataset, args_qa(all_rows), {
+            "k": K,
+            "grid": [list(g) for g in GRID],
+            "grid_complete": not partial and len(done) == len(GRID),
+            "conditions_collected": len(conditions),
+            "conditions_planned": len(GRID) + 1,
+        }),
         "hypotheses": {
             "H1": "silent-failure rate is non-monotonic in noise fraction "
                   "(peaks at partial noise, falls at total noise)",
@@ -107,8 +127,16 @@ def main():
         "rows": all_rows,
     })
 
-    _report_h1(conditions)
-    _report_h2(conditions)
+
+def args_qa(all_rows):
+    """Reconstruct the question set from collected rows for the manifest."""
+    seen, qa = set(), []
+    for rows in all_rows.values():
+        for r in rows:
+            if r.get("qid") not in seen:
+                seen.add(r.get("qid"))
+                qa.append({"qid": r.get("qid"), "is_answerable": r.get("is_answerable", True)})
+    return qa
 
 
 def _line(s):
