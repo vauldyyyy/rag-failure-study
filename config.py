@@ -110,6 +110,21 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 # uses separate index/cache files, so it can never be mixed with real results.
 DRY_RUN = False
 
+# Suffix appended to results and checkpoint filenames. Set by --tag so a second
+# generator's replication cannot overwrite the primary run's data: checkpoints are
+# keyed by condition name alone, which would otherwise collide silently and mix two
+# models' rows into one condition.
+RUN_TAG = ""
+
+
+def set_run_tag(tag: str):
+    global RUN_TAG
+    RUN_TAG = (tag or "").strip().replace(" ", "_")
+
+
+def tagged(stem: str) -> str:
+    return f"{stem}_{RUN_TAG}" if RUN_TAG else stem
+
 
 def set_dry_run(flag: bool):
     global DRY_RUN, RESULTS_DIR

@@ -32,6 +32,7 @@ def main():
     p.add_argument("--model", default=None)
     p.add_argument("--repeats", type=int, default=1)
     p.add_argument("--temperature", type=float, default=0.0)
+    p.add_argument("--tag", default="", help="Suffix results/checkpoints (cross-model runs)")
     p.add_argument("--from-step", type=int, default=0, help="Skip the first N steps")
     args = p.parse_args()
 
@@ -55,6 +56,8 @@ def main():
                 full += ["--repeats", str(args.repeats)]
             if args.temperature:
                 full += ["--temperature", str(args.temperature)]
+            if args.tag:
+                full += ["--tag", args.tag]
 
         print(f"\n{'=' * 70}\n{label}\n{'=' * 70}")
         result = subprocess.run(full, cwd=os.path.dirname(os.path.abspath(__file__)))

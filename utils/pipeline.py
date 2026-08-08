@@ -108,7 +108,7 @@ def _checkpoint_path(name, dataset="squad"):
     d = os.path.join(config.RESULTS_DIR, "checkpoints")
     os.makedirs(d, exist_ok=True)
     safe = name.replace("/", "_").replace("@", "_at_").replace("=", "")
-    return os.path.join(d, f"{dataset}_{safe}.json")
+    return os.path.join(d, f"{config.tagged(dataset)}_{safe}.json")
 
 
 def load_checkpoint(name, dataset="squad"):
@@ -246,7 +246,8 @@ def run_condition(name, qa_pairs, retrieval, corpus, k=config.TOP_K,
 
 
 def save_results(filename, payload):
-    path = os.path.join(config.RESULTS_DIR, filename)
+    stem, ext = os.path.splitext(filename)
+    path = os.path.join(config.RESULTS_DIR, config.tagged(stem) + ext)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False)
     print(f"Wrote {path}")
@@ -313,9 +314,16 @@ def common_args(description):
     p.add_argument("--repeats", type=int, default=1,
                    help="Samples per item. Only meaningful with --temperature > 0")
     p.add_argument("--temperature", type=float, default=0.0)
+    p.add_argument("--tag", default="",
+                   help="Suffix results and checkpoints, e.g. --tag m2 for a "
+                        "cross-model replication. Without it a second generator "
+                        "would overwrite the primary run's rows.")
     args = p.parse_args()
 
     config.set_dry_run(args.dry_run)
+    config.set_run_tag(args.tag)
+    if args.tag:
+        print(f"Run tag '{args.tag}' — writing to *_{args.tag}.json\n")
     if args.dry_run:
         print("*** DRY RUN — stub model, synthetic numbers, results_dryrun/ ***\n")
     if args.repeats > 1 and args.temperature == 0.0:
