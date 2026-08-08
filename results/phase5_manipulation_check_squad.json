@@ -1,0 +1,150 @@
+{
+  "n_rows": 625,
+  "conditions": [
+    "baseline",
+    "clean",
+    "related@25",
+    "related@50",
+    "related@75"
+  ],
+  "convergent_validity": {
+    "natural_fail": {
+      "n": 53,
+      "CORRECT": {
+        "mean": 0.069,
+        "lo": 0.0,
+        "hi": 0.1724,
+        "n": 29
+      },
+      "ABSTAIN": {
+        "mean": 0.7759,
+        "lo": 0.6207,
+        "hi": 0.9138,
+        "n": 29
+      },
+      "UNSUPPORTED": {
+        "mean": 0.0517,
+        "lo": 0.0,
+        "hi": 0.1379,
+        "n": 29
+      },
+      "INCORRECT_GROUNDED": {
+        "mean": 0.1034,
+        "lo": 0.0172,
+        "hi": 0.2241,
+        "n": 29
+      },
+      "silent_failure_rate": {
+        "mean": 0.1667,
+        "lo": 0.037,
+        "hi": 0.3148,
+        "n": 27
+      }
+    },
+    "natural_ok": {
+      "n": 247,
+      "CORRECT": {
+        "mean": 0.7421,
+        "lo": 0.6627,
+        "hi": 0.8135,
+        "n": 126
+      },
+      "ABSTAIN": {
+        "mean": 0.2103,
+        "lo": 0.1429,
+        "hi": 0.2857,
+        "n": 126
+      },
+      "UNSUPPORTED": {
+        "mean": 0.0397,
+        "lo": 0.0079,
+        "hi": 0.0794,
+        "n": 126
+      },
+      "INCORRECT_GROUNDED": {
+        "mean": 0.0079,
+        "lo": 0.0,
+        "hi": 0.0238,
+        "n": 126
+      },
+      "silent_failure_rate": {
+        "mean": 0.1818,
+        "lo": 0.0606,
+        "hi": 0.3333,
+        "n": 33
+      }
+    },
+    "synthetic": null
+  },
+  "observational_dose_response": [
+    {
+      "score_lo": 0.2834,
+      "score_hi": 0.4558,
+      "n": 75,
+      "gold_in_context": {
+        "mean": 0.7867,
+        "lo": 0.68,
+        "hi": 0.8667,
+        "n": 75
+      },
+      "silent_failure_rate": {
+        "mean": 0.2609,
+        "lo": 0.087,
+        "hi": 0.4348,
+        "n": 23
+      }
+    },
+    {
+      "score_lo": 0.4575,
+      "score_hi": 0.5323,
+      "n": 75,
+      "gold_in_context": {
+        "mean": 0.92,
+        "lo": 0.8533,
+        "hi": 0.9733,
+        "n": 75
+      },
+      "silent_failure_rate": {
+        "mean": 0.2,
+        "lo": 0.0,
+        "hi": 0.4,
+        "n": 15
+      }
+    },
+    {
+      "score_lo": 0.533,
+      "score_hi": 0.5985,
+      "n": 75,
+      "gold_in_context": {
+        "mean": 0.76,
+        "lo": 0.6667,
+        "hi": 0.8533,
+        "n": 75
+      },
+      "silent_failure_rate": {
+        "mean": 0.0667,
+        "lo": 0.0,
+        "hi": 0.2,
+        "n": 15
+      }
+    },
+    {
+      "score_lo": 0.5989,
+      "score_hi": 0.7734,
+      "n": 75,
+      "gold_in_context": {
+        "mean": 0.8267,
+        "lo": 0.7333,
+        "hi": 0.9067,
+        "n": 75
+      },
+      "silent_failure_rate": {
+        "mean": 0.1364,
+        "lo": 0.0,
+        "hi": 0.3636,
+        "n": 11
+      }
+    }
+  ],
+  "note": "Interval overlap is weak evidence of equivalence, not proof. Non-overlap is strong evidence of difference."
+}
