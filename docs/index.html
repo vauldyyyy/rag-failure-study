@@ -207,24 +207,27 @@
 <div class="wrap">
 
   <header>
-    <div class="eyebrow">Interim findings · SQuAD v2 · n=150 per condition</div>
-    <h1>Degrading retrieval did not increase hallucination</h1>
-    <p class="lede">A controlled study of what a retrieval-augmented system does when its
-      evidence gets worse. Accuracy fell by 12 points. Fabrication did not move at all.</p>
+    <div class="eyebrow">Vauldan Dsouza · Goa College of Engineering · SQuAD v2</div>
+    <h1>A RAG system can tell no evidence from some evidence — but not good evidence from bad</h1>
+    <p class="lede">Corrupting retrieval halved accuracy without producing a single extra
+      fabrication. Only when the evidence was removed outright did the system notice,
+      abstaining on 92% of questions.</p>
     <div class="status-strip">
       <span class="chip live">Study in progress</span>
-      <span class="chip">4 of 5 noise levels collected</span>
+      <span class="chip">Noise sweep complete · 5 levels</span>
       <span class="chip">0 invalid generations</span>
       <span class="chip">Hypotheses preregistered</span>
+      <span class="chip">Judge ≠ generator</span>
     </div>
   </header>
 
   <section>
     <div class="verdict">
       <div class="verdict-claim">
-        As the share of the context window filled with plausible-but-wrong passages rose
-        from 0% to 75%, correct answers fell from 96 to 78 of 150.
-        <strong>Unsupported assertions stayed at 7, 6, 7, 7.</strong>
+        Through 75% corruption, correct answers fell from 96 to 78 of 150 while
+        unsupported assertions stayed at 7, 6, 7, 7.
+        <strong>At 100% corruption abstention jumped from 38% to 92%</strong> — the
+        safety response is a threshold, not a gradient.
       </div>
       <div class="readout">
         <div class="readout-row">
@@ -237,11 +240,20 @@
           <span class="readout-value flat">±0.0 pts</span>
           <span class="readout-note">[−2.7, +2.7] · p = 1.00</span>
         </div>
+        <div class="readout-row">
+          <span class="readout-label">Δ abstention at 100% corruption</span>
+          <span class="readout-value">+62.9 pts</span>
+          <span class="readout-note">[+53.0, +71.2] · p &lt; 0.0001</span>
+        </div>
       </div>
     </div>
-    <p>Both figures are paired bootstraps over the same 150 questions, so per-question
-      difficulty cancels. The hallucination result is not a weak trend — it is a null
-      bounded within ±2.7 points, measured against an accuracy collapse four times that size.</p>
+    <p>All figures are paired bootstraps over the same questions, so per-question difficulty
+      cancels. The hallucination result is not a weak trend — it is a null bounded within
+      ±2.7 points, measured against an accuracy collapse four times that size.</p>
+    <p><strong>Why this matters practically:</strong> partial retrieval failure is the costly
+      regime, but not for the usual reason. It does not provoke fabrication. It goes
+      undetected — accuracy halves while the system keeps answering at nearly the same rate,
+      showing no outward sign that anything is wrong.</p>
   </section>
 
   <section>
@@ -292,11 +304,26 @@
           <div class="seg u" style="width:4.7%"  title="Unsupported: 7"><small>7</small></div>
         </div>
       </div>
-      <div class="axis-note">share of context window replaced with related-but-wrong passages →</div>
+      <div class="bar-row">
+        <span class="bar-label">100%</span>
+        <div class="bar">
+          <div class="seg c" style="width:0.8%"  title="Correct: 1"></div>
+          <div class="seg a" style="width:92.4%" title="Abstained: 122">122</div>
+          <div class="seg g" style="width:6.1%"  title="Wrong but grounded: 8"></div>
+          <div class="seg u" style="width:0.8%"  title="Unsupported: 1"></div>
+        </div>
+      </div>
+      <div class="axis-note">share of context window replaced with related-but-wrong passages →
+        · bottom row n=132</div>
     </div>
 
-    <p>The green band shrinks and the blue band grows. The red band — the only failure
-      mode that misleads a user — is the same width in every row.</p>
+    <p>Read the red band across all five rows: it is the same width in every one, and
+      narrowest at the bottom. It is the only failure mode that misleads a user, and
+      corrupting retrieval never widened it.</p>
+    <p>The bottom row is the mechanism. Between 0% and 75% the blue band creeps from 44 to
+      57 — the system barely reacts. Remove the evidence entirely and it flips to 122.
+      Abstention is triggered by the <em>absence</em> of evidence, not by its
+      <em>quality</em>.</p>
   </section>
 
   <section>
@@ -331,6 +358,7 @@
           <tr><td>25%</td><td>0.807</td><td>0.607</td><td>0.313</td><td>0.040</td><td>−0.033 <small>p=.017</small></td><td class="null-cell">−0.007 <small>p=.72</small></td></tr>
           <tr><td>50%</td><td>0.760</td><td>0.573</td><td>0.333</td><td>0.047</td><td>−0.067 <small>p&lt;.001</small></td><td class="null-cell">+0.000 <small>p=1.0</small></td></tr>
           <tr><td>75%</td><td>0.647</td><td>0.520</td><td>0.380</td><td>0.047</td><td>−0.120 <small>p&lt;.001</small></td><td class="null-cell">+0.000 <small>p=1.0</small></td></tr>
+          <tr><td>100% <small>n=132</small></td><td>0.008</td><td>0.008</td><td>0.924</td><td>0.008</td><td>−0.629 <small>p&lt;.001</small></td><td class="null-cell">−0.038 <small>p=.069</small></td></tr>
         </tbody>
       </table>
     </div>
@@ -339,24 +367,66 @@
   </section>
 
   <section>
+    <div class="eyebrow">Can failure be predicted before generation?</div>
+    <h2>A similarity gate works, but only above a cost threshold</h2>
+    <p>Retrieval scores exist before the generator is called, so a system could refuse in
+      advance rather than answer badly. The strongest signal reaches AUROC <strong>0.687</strong>
+      for predicting an unsupported assertion — above chance, and enough to gate on.</p>
+    <p>Whether gating is <em>worth</em> it depends on how much worse a fabrication is than a
+      refusal, which is a property of the application rather than the model. Sweeping that
+      cost ratio gives a deployment rule:</p>
+    <div class="ledger">
+      <div class="ledger-line"><span class="ledger-num">C &lt; 5</span><span>answer everything — no threshold beats it</span></div>
+      <div class="ledger-line"><span class="ledger-num n-a">C = 5</span><span>gate at 0.44, answer 83% of questions</span></div>
+      <div class="ledger-line"><span class="ledger-num n-a">C = 10</span><span>gate at 0.57, answer 54%</span></div>
+      <div class="ledger-line"><span class="ledger-num n-u">C = 20</span><span>gate at 0.62, answer 38%</span></div>
+    </div>
+    <p><strong>C</strong> is the cost of one fabrication expressed in units of one correct
+      answer. Below 5×, a retrieval-score gate destroys more value than it protects.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Validity</div>
+    <h2>Does the synthetic corruption match real failure?</h2>
+    <p>The perturbation is artificial, so the obvious objection is that none of it describes
+      retrieval failing on its own. The clean condition answers it: 53 questions where the
+      right document simply was not retrieved, no intervention at all.</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Outcome</th><th>Natural failure <small>n=53</small></th><th>Synthetic <small>n=132</small></th><th>Intervals overlap</th></tr></thead>
+        <tbody>
+          <tr><td>Abstained</td><td>0.776</td><td>0.924</td><td>yes</td></tr>
+          <tr><td>Unsupported</td><td>0.052</td><td>0.008</td><td>yes</td></tr>
+          <tr><td>Wrong but grounded</td><td>0.103</td><td>0.061</td><td>yes</td></tr>
+          <tr><td>Correct</td><td>0.069</td><td>0.008</td><td>yes</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Intervals overlap on every outcome. Stated as the weak result it is: this is evidence
+      against a large discrepancy, not proof of equivalence.</p>
+  </section>
+
+  <section>
     <div class="eyebrow">Integrity</div>
     <h2>What this does not show</h2>
     <div class="grid-2">
       <div class="note">
-        <h3>The preregistered hypothesis failed</h3>
+        <h3>The preregistered hypothesis was only half right</h3>
         <p>We predicted silent failure would peak at partial corruption. Observed:
-          0.185, 0.203, 0.219, 0.208 — an interior bump, but with intervals of
+          0.185, 0.203, 0.219, 0.208, 0.069 — there <em>is</em> an interior peak, but only
+          the collapse at 100% is significant. The rising limb sits inside intervals of
           [0.09, 0.30] and [0.12, 0.33] that overlap completely. A power analysis run
-          <em>before</em> data collection said separating a peak at n=150 needs a gap
-          above 16 points. The observed spread is 3. Reported as unsupported.</p>
+          <em>before</em> data collection said separating a peak at n=150 needs a gap above
+          16 points; the observed rise is 3. Reported as partially supported at best — and
+          the abstention series describes the mechanism better than the derived ratio does.</p>
       </div>
       <div class="note">
         <h3>Bounds on the claim</h3>
         <ul>
-          <li>One generator, one retriever, one noise type</li>
-          <li>n=150; unsupported counts of 6–7 make the <em>level</em> imprecise even though the <em>difference</em> is tight</li>
-          <li>The 100% corruption condition has not run yet</li>
-          <li>Perturbations are synthetic; a manipulation check against naturally failed retrievals is pending</li>
+          <li>One generator, one retriever, one noise type — <code>related</code> only</li>
+          <li>n=150 (n=132 at 100%); unsupported counts of 1–7 make the <em>level</em> imprecise even where the <em>difference</em> is tight</li>
+          <li>Retrieval is a 384-dimension local model, so absolute accuracy is not comparable to SQuAD leaderboards</li>
+          <li>Context-size and mitigation experiments are still collecting</li>
         </ul>
       </div>
     </div>
