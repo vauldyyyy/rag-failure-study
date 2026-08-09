@@ -119,7 +119,7 @@ def table_predictability(data):
     return "\n".join(lines)
 
 
-def macros(baseline, noise, predict, manifest, synthetic):
+def macros(baseline, noise, predict, manifest, synthetic, judge=None):
     """Inline numbers, so prose can never drift from the data."""
     def m(name, value):
         return f"\\newcommand{{\\{name}}}{{{value}}}"
@@ -211,6 +211,23 @@ def macros(baseline, noise, predict, manifest, synthetic):
                   "--" if block.get("best_auroc") is None else f"{block['best_auroc']:.3f}"),
             ]
 
+
+    if judge:
+        dep = judge.get("dependence") or {}
+        if dep.get("n_valid"):
+            out.append(m("nScoredRows", f"{dep['n_valid']:,}"))
+            out.append(m("judgeInvocationPct", f"{100 * dep['judge_invocation_rate']:.1f}"))
+            out.append(m("nUnsupported", dep.get("n_unsupported", "??")))
+            out.append(m("nUnsupportedRule", dep.get("n_unsupported_rule", "??")))
+            out.append(m("nUnsupportedJudged", dep.get("n_unsupported_judged", "??")))
+            share = dep.get("judge_derived_share_of_headline")
+            if share is not None:
+                out.append(m("ruleDerivedPct", f"{100 * (1 - share):.0f}"))
+        agree = judge.get("agreement") or {}
+        if agree.get("cohens_kappa") is not None:
+            out.append(m("judgeKappa", f"{agree['cohens_kappa']:.3f}"))
+            out.append(m("judgeAgreementN", agree.get("n", "??")))
+
     return "\n".join(out)
 
 
@@ -225,6 +242,7 @@ def main():
     args = p.parse_args()
     config.set_dry_run(args.dry_run)
 
+    judge = load(f"phase6_judge_agreement_{args.dataset}.json")
     baseline = load(f"phase1_baseline_{args.dataset}.json")
     noise = load(f"phase2b_noise_{args.dataset}.json")
     predict = load(f"phase3_predictability_{args.dataset}.json")
@@ -244,7 +262,7 @@ def main():
     for filename, content in (
         ("tab1_noise.tex", table_noise(noise)),
         ("tab2_predictability.tex", table_predictability(predict)),
-        ("macros.tex", macros(baseline, noise, predict, manifest, synthetic)),
+        ("macros.tex", macros(baseline, noise, predict, manifest, synthetic, judge)),
     ):
         if content is None:
             print(f"  skip {filename} (source results missing)")

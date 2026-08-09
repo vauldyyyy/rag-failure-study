@@ -209,12 +209,28 @@ finding about generation. Abstention is detected by rule; a refusal phrase follo
 by a claim (``the context does not say, but it was 1241'') is scored as an
 assertion, not an abstention.
 
-\paragraph{Judging.}
+\paragraph{Judging, and how little rests on it.}
 For answerable items that were neither abstentions nor correct, a judge sees the
 question, the answer, and \emph{the context that was actually shown to the
 generator}, and labels each answer supported or unsupported. Unanswerable items
 need no judge: SQuAD~v2 guarantees no answer exists, so any assertion is
-unsupported by construction. This gating is reported rather than hidden. We also
+unsupported by construction.
+
+The consequence is worth stating precisely, because a study whose primary outcome
+is assigned by a language model invites the obvious objection. Across
+\NUM{nScoredRows} scored generations the judge is invoked on
+\NUM{judgeInvocationPct}\% of items, and of the \NUM{nUnsupported} unsupported
+labels that constitute the headline metric, \NUM{nUnsupportedRule} follow from the
+rule and \NUM{nUnsupportedJudged} from the judge. The primary outcome is therefore
+\NUM{ruleDerivedPct}\% rule-derived. It does not stand or fall on judge quality,
+and a reader who distrusts LLM judgment entirely can discard the judged subset and
+still recover the result.
+
+Every judged row now stores the exact context the judge ruled on, so any verdict
+can be re-audited or re-scored by a second model. Rows collected before this was
+added cannot be: reconstructing their context would require replaying a stochastic
+perturbation and assuming it landed identically. We report that limitation rather
+than assert reproducibility we cannot demonstrate. We also
 track \emph{parametric} correctness --- items answered correctly with the gold
 document absent from context --- because such items inflate every clean-condition
 baseline and are rarely separated out.

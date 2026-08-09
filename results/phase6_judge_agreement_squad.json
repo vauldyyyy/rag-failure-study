@@ -1,0 +1,13 @@
+{
+  "dependence": {
+    "n_valid": 950,
+    "n_judge_invoked": 47,
+    "judge_invocation_rate": 0.0495,
+    "n_unsupported": 39,
+    "n_unsupported_rule": 31,
+    "n_unsupported_judged": 8,
+    "judge_derived_share_of_headline": 0.2051
+  },
+  "agreement": null,
+  "note": "Inter-judge agreement bounds label reliability from one side only: two LLM judges can share a bias no human would. Disagreement is decisive against the labels; agreement is supportive, not proof."
+}

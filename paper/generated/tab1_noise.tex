@@ -4,11 +4,11 @@
 \toprule
 Condition & Correct & Abstained & Unsupported & Silent-fail & $\Delta$F1 vs clean \\
 \midrule
-clean & 64.0 \tiny[56.0, 72.0] & 29.3 \tiny[22.0, 37.3] & 4.7 \tiny[1.3, 8.0] & 18.5 \tiny[9.3, 29.6] & -- \\
+clean & -- & -- & -- & -- & -- \\
 related@25 & 60.7 \tiny[52.7, 68.7] & 31.3 \tiny[24.0, 39.3] & 4.0 \tiny[1.3, 7.3] & 20.3 \tiny[11.9, 30.5] & -0.018 \tiny[-0.051, +0.009] \\
 related@50 & 57.3 \tiny[49.3, 65.3] & 33.3 \tiny[26.0, 41.3] & 4.7 \tiny[2.0, 8.0] & 21.9 \tiny[12.5, 32.8] & -0.047 \tiny[-0.086, -0.013] \\
 related@75 & 52.0 \tiny[43.3, 60.0] & 38.0 \tiny[30.7, 46.0] & 4.7 \tiny[1.3, 8.0] & 20.8 \tiny[12.5, 30.6] & -0.093 \tiny[-0.148, -0.046] \\
-related@100 & 0.8 \tiny[0.0, 2.3] & 92.4 \tiny[87.9, 96.2] & 0.8 \tiny[0.0, 2.3] & 6.9 \tiny[3.0, 11.5] & -0.584 \tiny[-0.665, -0.503] \\
+related@100 & 1.3 \tiny[0.0, 3.3] & 92.7 \tiny[88.0, 96.7] & 0.7 \tiny[0.0, 2.0] & 6.1 \tiny[2.7, 10.1] & -0.578 \tiny[-0.658, -0.502] \\
 \bottomrule
 \end{tabular}
 \caption{Outcome composition under each retrieval perturbation at $K=4$. All values are percentages with 95\% bootstrap confidence intervals; $\Delta$F1 is a paired bootstrap against the clean condition on the same questions. Silent-fail is the share of non-correct answers that were assertions rather than abstentions.}

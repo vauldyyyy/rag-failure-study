@@ -1,27 +1,67 @@
 {
   "manifest": {
+    "synthetic": false,
     "dataset": "squad",
-    "rebuilt_from_checkpoints": true,
-    "conditions_collected": 5,
-    "conditions_planned": 10,
-    "grid_complete": false,
-    "incomplete_conditions": [
-      "related@100 (132/150)"
-    ],
+    "n_qa": 150,
+    "n_answerable": 114,
+    "n_unanswerable": 36,
     "llm_model": "models/gemini-3.5-flash-lite",
     "judge_model": "models/gemini-3.1-flash-lite",
     "judge_self_eval": false,
     "embed_backend": "local",
     "embed_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "chunk_size": 256,
+    "chunk_overlap": 50,
+    "retrieval_depth": 20,
+    "f1_correct_threshold": 0.5,
     "seed": 20240617,
+    "temperature": 0.0,
     "k": 4,
-    "n_qa": 150,
-    "n_answerable": 114,
-    "n_unanswerable": 36
+    "grid": [
+      [
+        "related",
+        0.25
+      ],
+      [
+        "related",
+        0.5
+      ],
+      [
+        "related",
+        0.75
+      ],
+      [
+        "related",
+        1.0
+      ],
+      [
+        "random",
+        0.5
+      ],
+      [
+        "random",
+        1.0
+      ],
+      [
+        "counterfactual",
+        0.5
+      ],
+      [
+        "counterfactual",
+        1.0
+      ],
+      [
+        "drop_gold",
+        1.0
+      ]
+    ],
+    "grid_complete": false,
+    "conditions_collected": 5,
+    "conditions_planned": 10
   },
   "hypotheses": {
-    "H1": "silent-failure rate is non-monotonic in noise fraction",
-    "H2": "related noise suppresses abstention more than random at equal fraction"
+    "H1": "silent-failure rate is non-monotonic in noise fraction (peaks at partial noise, falls at total noise)",
+    "H2": "related noise suppresses abstention more than random noise at equal fraction"
   },
   "conditions": {
     "clean": {
@@ -42,38 +82,19 @@
       "parametric_correct_rate": 0.0175,
       "judge_self_eval": false,
       "silent_failure_rate": 0.1852,
+      "treatment_applied_rate": 0.0,
+      "mean_slots_perturbed": 0.0,
+      "slots_perturbed_expected": 0,
       "condition": "clean",
+      "k": 4,
       "noise_type": "clean",
       "noise_frac": 0.0,
-      "k": 4,
-      "n_rows_collected": 150,
-      "complete": true,
-      "ci": {
-        "abstention_rate": {
-          "mean": 0.2933,
-          "lo": 0.22,
-          "hi": 0.3733,
-          "n": 150
-        },
-        "hallucination_rate": {
-          "mean": 0.0467,
-          "lo": 0.0133,
-          "hi": 0.08,
-          "n": 150
-        },
-        "correct_rate": {
-          "mean": 0.64,
-          "lo": 0.56,
-          "hi": 0.72,
-          "n": 150
-        },
-        "silent_failure_rate": {
-          "mean": 0.1852,
-          "lo": 0.0926,
-          "hi": 0.2963,
-          "n": 54
-        }
-      }
+      "gold_position": null,
+      "seed": 20240617,
+      "model": "models/gemini-3.5-flash-lite",
+      "repeats": 1,
+      "temperature": 0.0,
+      "synthetic": false
     },
     "related@25": {
       "n": 150,
@@ -93,12 +114,19 @@
       "parametric_correct_rate": 0.0175,
       "judge_self_eval": false,
       "silent_failure_rate": 0.2034,
+      "treatment_applied_rate": 1.0,
+      "mean_slots_perturbed": 1.0,
+      "slots_perturbed_expected": 1,
       "condition": "related@25",
+      "k": 4,
       "noise_type": "related",
       "noise_frac": 0.25,
-      "k": 4,
-      "n_rows_collected": 150,
-      "complete": true,
+      "gold_position": null,
+      "seed": 20240617,
+      "model": "models/gemini-3.5-flash-lite",
+      "repeats": 1,
+      "temperature": 0.0,
+      "synthetic": false,
       "ci": {
         "abstention_rate": {
           "mean": 0.3133,
@@ -131,36 +159,21 @@
           "lo": -0.0509,
           "hi": 0.0091,
           "p_two_sided": 0.21,
-          "n": 150,
-          "q_value": 0.21,
-          "significant_fdr": false
-        },
-        "correct_rate": {
-          "diff": -0.0333,
-          "lo": -0.0667,
-          "hi": -0.0067,
-          "p_two_sided": 0.017,
-          "n": 150,
-          "q_value": 0.017,
-          "significant_fdr": true
+          "n": 150
         },
         "abstention_rate": {
           "diff": 0.02,
           "lo": -0.0067,
           "hi": 0.0533,
           "p_two_sided": 0.227,
-          "n": 150,
-          "q_value": 0.227,
-          "significant_fdr": false
+          "n": 150
         },
         "hallucination_rate": {
           "diff": -0.0067,
           "lo": -0.02,
           "hi": 0.0,
           "p_two_sided": 0.719,
-          "n": 150,
-          "q_value": 1.0,
-          "significant_fdr": false
+          "n": 150
         }
       }
     },
@@ -182,12 +195,19 @@
       "parametric_correct_rate": 0.0175,
       "judge_self_eval": false,
       "silent_failure_rate": 0.2188,
+      "treatment_applied_rate": 1.0,
+      "mean_slots_perturbed": 2.0,
+      "slots_perturbed_expected": 2,
       "condition": "related@50",
+      "k": 4,
       "noise_type": "related",
       "noise_frac": 0.5,
-      "k": 4,
-      "n_rows_collected": 150,
-      "complete": true,
+      "gold_position": null,
+      "seed": 20240617,
+      "model": "models/gemini-3.5-flash-lite",
+      "repeats": 1,
+      "temperature": 0.0,
+      "synthetic": false,
       "ci": {
         "abstention_rate": {
           "mean": 0.3333,
@@ -220,36 +240,21 @@
           "lo": -0.0859,
           "hi": -0.0129,
           "p_two_sided": 0.0,
-          "n": 150,
-          "q_value": 0.0,
-          "significant_fdr": true
-        },
-        "correct_rate": {
-          "diff": -0.0667,
-          "lo": -0.1067,
-          "hi": -0.0267,
-          "p_two_sided": 0.0,
-          "n": 150,
-          "q_value": 0.0,
-          "significant_fdr": true
+          "n": 150
         },
         "abstention_rate": {
           "diff": 0.04,
           "lo": 0.0,
           "hi": 0.08,
           "p_two_sided": 0.064,
-          "n": 150,
-          "q_value": 0.0853,
-          "significant_fdr": false
+          "n": 150
         },
         "hallucination_rate": {
           "diff": 0.0,
           "lo": -0.0267,
           "hi": 0.0267,
           "p_two_sided": 1.0,
-          "n": 150,
-          "q_value": 1.0,
-          "significant_fdr": false
+          "n": 150
         }
       }
     },
@@ -271,12 +276,19 @@
       "parametric_correct_rate": 0.0263,
       "judge_self_eval": false,
       "silent_failure_rate": 0.2083,
+      "treatment_applied_rate": 1.0,
+      "mean_slots_perturbed": 3.0,
+      "slots_perturbed_expected": 3,
       "condition": "related@75",
+      "k": 4,
       "noise_type": "related",
       "noise_frac": 0.75,
-      "k": 4,
-      "n_rows_collected": 150,
-      "complete": true,
+      "gold_position": null,
+      "seed": 20240617,
+      "model": "models/gemini-3.5-flash-lite",
+      "repeats": 1,
+      "temperature": 0.0,
+      "synthetic": false,
       "ci": {
         "abstention_rate": {
           "mean": 0.38,
@@ -309,125 +321,102 @@
           "lo": -0.1485,
           "hi": -0.046,
           "p_two_sided": 0.0,
-          "n": 150,
-          "q_value": 0.0,
-          "significant_fdr": true
-        },
-        "correct_rate": {
-          "diff": -0.12,
-          "lo": -0.18,
-          "hi": -0.0733,
-          "p_two_sided": 0.0,
-          "n": 150,
-          "q_value": 0.0,
-          "significant_fdr": true
+          "n": 150
         },
         "abstention_rate": {
           "diff": 0.0867,
           "lo": 0.04,
           "hi": 0.14,
           "p_two_sided": 0.0,
-          "n": 150,
-          "q_value": 0.0,
-          "significant_fdr": true
+          "n": 150
         },
         "hallucination_rate": {
           "diff": 0.0,
           "lo": -0.0267,
           "hi": 0.0267,
           "p_two_sided": 1.0,
-          "n": 150,
-          "q_value": 1.0,
-          "significant_fdr": false
+          "n": 150
         }
       }
     },
     "related@100": {
-      "n": 132,
+      "n": 150,
       "n_invalid": 0,
-      "n_answerable": 100,
-      "n_unanswerable": 32,
-      "EM": 0.01,
-      "F1": 0.0149,
-      "contains_gold_rate": 0.01,
-      "abstention_rate": 0.9242,
-      "abstention_rate_answerable": 0.9,
-      "hallucination_rate": 0.0076,
-      "hallucination_rate_answerable": 0.01,
+      "n_answerable": 114,
+      "n_unanswerable": 36,
+      "EM": 0.0175,
+      "F1": 0.0228,
+      "contains_gold_rate": 0.0175,
+      "abstention_rate": 0.9267,
+      "abstention_rate_answerable": 0.9035,
+      "hallucination_rate": 0.0067,
+      "hallucination_rate_answerable": 0.0088,
       "hallucination_rate_unanswerable": 0.0,
-      "incorrect_grounded_rate": 0.0606,
+      "incorrect_grounded_rate": 0.0533,
       "gold_in_context_rate": 0.0,
-      "parametric_correct_rate": 0.01,
+      "parametric_correct_rate": 0.0175,
       "judge_self_eval": false,
-      "silent_failure_rate": 0.0687,
+      "silent_failure_rate": 0.0608,
+      "treatment_applied_rate": 1.0,
+      "mean_slots_perturbed": 4.0,
+      "slots_perturbed_expected": 4,
       "condition": "related@100",
+      "k": 4,
       "noise_type": "related",
       "noise_frac": 1.0,
-      "k": 4,
-      "n_rows_collected": 132,
-      "complete": false,
+      "gold_position": null,
+      "seed": 20240617,
+      "model": "models/gemini-3.5-flash-lite",
+      "repeats": 1,
+      "temperature": 0.0,
+      "synthetic": false,
       "ci": {
         "abstention_rate": {
-          "mean": 0.9242,
-          "lo": 0.8786,
-          "hi": 0.9621,
-          "n": 132
+          "mean": 0.9267,
+          "lo": 0.88,
+          "hi": 0.9667,
+          "n": 150
         },
         "hallucination_rate": {
-          "mean": 0.0076,
+          "mean": 0.0067,
           "lo": 0.0,
-          "hi": 0.0227,
-          "n": 132
+          "hi": 0.02,
+          "n": 150
         },
         "correct_rate": {
-          "mean": 0.0076,
+          "mean": 0.0133,
           "lo": 0.0,
-          "hi": 0.0227,
-          "n": 132
+          "hi": 0.0333,
+          "n": 150
         },
         "silent_failure_rate": {
-          "mean": 0.0687,
-          "lo": 0.0305,
-          "hi": 0.1145,
-          "n": 131
+          "mean": 0.0608,
+          "lo": 0.027,
+          "hi": 0.1014,
+          "n": 148
         }
       },
       "vs_clean": {
         "F1": {
-          "diff": -0.5843,
-          "lo": -0.6646,
-          "hi": -0.5027,
+          "diff": -0.5783,
+          "lo": -0.6576,
+          "hi": -0.5016,
           "p_two_sided": 0.0,
-          "n": 132,
-          "q_value": 0.0,
-          "significant_fdr": true
-        },
-        "correct_rate": {
-          "diff": -0.6288,
-          "lo": -0.7121,
-          "hi": -0.5455,
-          "p_two_sided": 0.0,
-          "n": 132,
-          "q_value": 0.0,
-          "significant_fdr": true
+          "n": 150
         },
         "abstention_rate": {
-          "diff": 0.6288,
-          "lo": 0.5303,
-          "hi": 0.7121,
+          "diff": 0.6333,
+          "lo": 0.5467,
+          "hi": 0.7133,
           "p_two_sided": 0.0,
-          "n": 132,
-          "q_value": 0.0,
-          "significant_fdr": true
+          "n": 150
         },
         "hallucination_rate": {
-          "diff": -0.0379,
-          "lo": -0.0758,
-          "hi": 0.0,
-          "p_two_sided": 0.069,
-          "n": 132,
-          "q_value": 0.276,
-          "significant_fdr": false
+          "diff": -0.04,
+          "lo": -0.08,
+          "hi": -0.0067,
+          "p_two_sided": 0.045,
+          "n": 150
         }
       }
     }
@@ -23460,6 +23449,569 @@
           "min_score": 0.3162,
           "score_margin": 0.0547,
           "score_spread": 0.0261,
+          "n_context": 4
+        },
+        "condition": "related@100",
+        "repeat": 0,
+        "n_perturbed": 4,
+        "treatment_applied": true
+      },
+      {
+        "qid": "5729f0db6aef051400155127",
+        "question": "How many species of bird and mammals are there in the Amazon region?",
+        "gold_answers": [
+          "2,000",
+          "some 2,000"
+        ],
+        "is_answerable": true,
+        "prediction": "I cannot answer based on the context",
+        "gen_status": "ok",
+        "em": 0,
+        "f1": 0.0,
+        "contains_gold": 0,
+        "abstained": true,
+        "gold_in_context": false,
+        "outcome": "ABSTAIN",
+        "judge": null,
+        "p_at_k": 0,
+        "recall_at_k": 0.0,
+        "signals": {
+          "top1_score": 0.5076,
+          "mean_score": 0.4875,
+          "min_score": 0.4612,
+          "score_margin": 0.1537,
+          "score_spread": 0.0465,
+          "n_context": 4
+        },
+        "condition": "related@100",
+        "repeat": 0,
+        "n_perturbed": 4,
+        "treatment_applied": true
+      },
+      {
+        "qid": "5727d9c43acd2414000dee17",
+        "question": "Starting in what year has Harvard topped the Academic Rankings of World Universities?",
+        "gold_answers": [
+          "2003"
+        ],
+        "is_answerable": true,
+        "prediction": "I cannot answer based on the context",
+        "gen_status": "ok",
+        "em": 0,
+        "f1": 0.0,
+        "contains_gold": 0,
+        "abstained": true,
+        "gold_in_context": false,
+        "outcome": "ABSTAIN",
+        "judge": null,
+        "p_at_k": 0,
+        "recall_at_k": 0.0,
+        "signals": {
+          "top1_score": 0.5209,
+          "mean_score": 0.502,
+          "min_score": 0.4928,
+          "score_margin": 0.2493,
+          "score_spread": 0.0282,
+          "n_context": 4
+        },
+        "condition": "related@100",
+        "repeat": 0,
+        "n_perturbed": 4,
+        "treatment_applied": true
+      },
+      {
+        "qid": "5725d34089a1e219009abf50",
+        "question": "What did Paul Baran develop ",
+        "gold_answers": [
+          "Paul Baran developed the concept Distributed Adaptive Message Block Switching",
+          "the concept Distributed Adaptive Message Block Switching",
+          "Distributed Adaptive Message Block Switching"
+        ],
+        "is_answerable": true,
+        "prediction": "distributed adaptive message block switching",
+        "gen_status": "ok",
+        "em": 1,
+        "f1": 1.0,
+        "contains_gold": 1,
+        "abstained": false,
+        "gold_in_context": false,
+        "outcome": "CORRECT",
+        "judge": null,
+        "parametric": true,
+        "p_at_k": 0,
+        "recall_at_k": 0.0,
+        "signals": {
+          "top1_score": 0.2632,
+          "mean_score": 0.2576,
+          "min_score": 0.249,
+          "score_margin": 0.0262,
+          "score_spread": 0.0142,
+          "n_context": 4
+        },
+        "condition": "related@100",
+        "repeat": 0,
+        "n_perturbed": 4,
+        "treatment_applied": true
+      },
+      {
+        "qid": "5a7b086921c2de001afe9d02",
+        "question": "What is the largest Mansion in the west coast?",
+        "gold_answers": [],
+        "is_answerable": false,
+        "prediction": "I cannot answer based on the context",
+        "gen_status": "ok",
+        "em": 0,
+        "f1": 0.0,
+        "contains_gold": 0,
+        "abstained": true,
+        "gold_in_context": false,
+        "outcome": "ABSTAIN",
+        "judge": null,
+        "p_at_k": 0,
+        "recall_at_k": 0.0,
+        "signals": {
+          "top1_score": 0.3741,
+          "mean_score": 0.3572,
+          "min_score": 0.3449,
+          "score_margin": 0.0267,
+          "score_spread": 0.0292,
+          "n_context": 4
+        },
+        "condition": "related@100",
+        "repeat": 0,
+        "n_perturbed": 4,
+        "treatment_applied": true
+      },
+      {
+        "qid": "572998673f37b319004784d8",
+        "question": "What is the logic behind the cicadas prime number evolutionary strategy?",
+        "gold_answers": [
+          "make it very difficult for predators to evolve that could specialize as predators",
+          "difficult for predators to evolve that could specialize as predators on Magicicadas",
+          "the prime number intervals between emergences make it very difficult for predators to evolve that could specialize as predators on Magicicadas",
+          "the prime number intervals between emergences make it very difficult for predators to evolve"
+        ],
+        "is_answerable": true,
+        "prediction": "I cannot answer based on the context",
+        "gen_status": "ok",
+        "em": 0,
+        "f1": 0.1111,
+        "contains_gold": 0,
+        "abstained": true,
+        "gold_in_context": false,
+        "outcome": "ABSTAIN",
+        "judge": null,
+        "p_at_k": 0,
+        "recall_at_k": 0.0,
+        "signals": {
+          "top1_score": 0.4118,
+          "mean_score": 0.4035,
+          "min_score": 0.3993,
+          "score_margin": 0.1997,
+          "score_spread": 0.0125,
+          "n_context": 4
+        },
+        "condition": "related@100",
+        "repeat": 0,
+        "n_perturbed": 4,
+        "treatment_applied": true
+      },
+      {
+        "qid": "57376a1bc3c5551400e51ec7",
+        "question": "What geometric shape is used in equations to determine net force?",
+        "gold_answers": [
+          "parallelogram"
+        ],
+        "is_answerable": true,
+        "prediction": "I cannot answer based on the context",
+        "gen_status": "ok",
+        "em": 0,
+        "f1": 0.0,
+        "contains_gold": 0,
+        "abstained": true,
+        "gold_in_context": false,
+        "outcome": "ABSTAIN",
+        "judge": null,
+        "p_at_k": 0,
+        "recall_at_k": 0.0,
+        "signals": {
+          "top1_score": 0.4415,
+          "mean_score": 0.4084,
+          "min_score": 0.3724,
+          "score_margin": 0.0961,
+          "score_spread": 0.0692,
+          "n_context": 4
+        },
+        "condition": "related@100",
+        "repeat": 0,
+        "n_perturbed": 4,
+        "treatment_applied": true
+      },
+      {
+        "qid": "573083dc2461fd1900a9ce6e",
+        "question": "What does colonialism lack that imperialism has?",
+        "gold_answers": [
+          "political focus",
+          "ideological"
+        ],
+        "is_answerable": true,
+        "prediction": "I cannot answer based on the context",
+        "gen_status": "ok",
+        "em": 0,
+        "f1": 0.0,
+        "contains_gold": 0,
+        "abstained": true,
+        "gold_in_context": false,
+        "outcome": "ABSTAIN",
+        "judge": null,
+        "p_at_k": 0,
+        "recall_at_k": 0.0,
+        "signals": {
+          "top1_score": 0.6094,
+          "mean_score": 0.5957,
+          "min_score": 0.5805,
+          "score_margin": 0.0059,
+          "score_spread": 0.0289,
+          "n_context": 4
+        },
+        "condition": "related@100",
+        "repeat": 0,
+        "n_perturbed": 4,
+        "treatment_applied": true
+      },
+      {
+        "qid": "56e1fc57e3433e140042322c",
+        "question": "Problems capable of theoretical solutions but consuming unreasonable time in practical application are known as what?",
+        "gold_answers": [
+          "intractable problems",
+          "intractable"
+        ],
+        "is_answerable": true,
+        "prediction": "I cannot answer based on the context",
+        "gen_status": "ok",
+        "em": 0,
+        "f1": 0.0,
+        "contains_gold": 0,
+        "abstained": true,
+        "gold_in_context": false,
+        "outcome": "ABSTAIN",
+        "judge": null,
+        "p_at_k": 0,
+        "recall_at_k": 0.0,
+        "signals": {
+          "top1_score": 0.4909,
+          "mean_score": 0.4853,
+          "min_score": 0.4795,
+          "score_margin": 0.0111,
+          "score_spread": 0.0114,
+          "n_context": 4
+        },
+        "condition": "related@100",
+        "repeat": 0,
+        "n_perturbed": 4,
+        "treatment_applied": true
+      },
+      {
+        "qid": "571155ae2419e31400955595",
+        "question": "What is William Rankine's nationality?",
+        "gold_answers": [
+          "Scottish"
+        ],
+        "is_answerable": true,
+        "prediction": "I cannot answer based on the context",
+        "gen_status": "ok",
+        "em": 0,
+        "f1": 0.0,
+        "contains_gold": 0,
+        "abstained": true,
+        "gold_in_context": false,
+        "outcome": "ABSTAIN",
+        "judge": null,
+        "p_at_k": 0,
+        "recall_at_k": 0.0,
+        "signals": {
+          "top1_score": 0.3355,
+          "mean_score": 0.3296,
+          "min_score": 0.3261,
+          "score_margin": 0.0438,
+          "score_spread": 0.0093,
+          "n_context": 4
+        },
+        "condition": "related@100",
+        "repeat": 0,
+        "n_perturbed": 4,
+        "treatment_applied": true
+      },
+      {
+        "qid": "5a6694dbf038b7001ab0c003",
+        "question": "The public network business allowed government agencies to do what?",
+        "gold_answers": [],
+        "is_answerable": false,
+        "prediction": "I cannot answer based on the context",
+        "gen_status": "ok",
+        "em": 0,
+        "f1": 0.0,
+        "contains_gold": 0,
+        "abstained": true,
+        "gold_in_context": false,
+        "outcome": "ABSTAIN",
+        "judge": null,
+        "p_at_k": 0,
+        "recall_at_k": 0.0,
+        "signals": {
+          "top1_score": 0.3902,
+          "mean_score": 0.3795,
+          "min_score": 0.3655,
+          "score_margin": 0.0302,
+          "score_spread": 0.0247,
+          "n_context": 4
+        },
+        "condition": "related@100",
+        "repeat": 0,
+        "n_perturbed": 4,
+        "treatment_applied": true
+      },
+      {
+        "qid": "5a2c0e0dbfd06b001a5ae9b1",
+        "question": "How many subscribers were lost within two months of launch from BSkyB?",
+        "gold_answers": [],
+        "is_answerable": false,
+        "prediction": "I cannot answer based on the context",
+        "gen_status": "ok",
+        "em": 0,
+        "f1": 0.0,
+        "contains_gold": 0,
+        "abstained": true,
+        "gold_in_context": false,
+        "outcome": "ABSTAIN",
+        "judge": null,
+        "p_at_k": 0,
+        "recall_at_k": 0.0,
+        "signals": {
+          "top1_score": 0.5978,
+          "mean_score": 0.5638,
+          "min_score": 0.5289,
+          "score_margin": 0.0592,
+          "score_spread": 0.0689,
+          "n_context": 4
+        },
+        "condition": "related@100",
+        "repeat": 0,
+        "n_perturbed": 4,
+        "treatment_applied": true
+      },
+      {
+        "qid": "57294279af94a219006aa209",
+        "question": "What range of years was the current warming compared to?",
+        "gold_answers": [
+          "between 1000 and 1900",
+          "1000 and 1900"
+        ],
+        "is_answerable": true,
+        "prediction": "I cannot answer based on the context",
+        "gen_status": "ok",
+        "em": 0,
+        "f1": 0.0,
+        "contains_gold": 0,
+        "abstained": true,
+        "gold_in_context": false,
+        "outcome": "ABSTAIN",
+        "judge": null,
+        "p_at_k": 0,
+        "recall_at_k": 0.0,
+        "signals": {
+          "top1_score": 0.48,
+          "mean_score": 0.4493,
+          "min_score": 0.4251,
+          "score_margin": 0.006,
+          "score_spread": 0.0548,
+          "n_context": 4
+        },
+        "condition": "related@100",
+        "repeat": 0,
+        "n_perturbed": 4,
+        "treatment_applied": true
+      },
+      {
+        "qid": "5705e3f252bb89140068966b",
+        "question": "How many metropolitan areas does Southern California's population encompass?",
+        "gold_answers": [
+          "seven"
+        ],
+        "is_answerable": true,
+        "prediction": "I cannot answer based on the context",
+        "gen_status": "ok",
+        "em": 0,
+        "f1": 0.0,
+        "contains_gold": 0,
+        "abstained": true,
+        "gold_in_context": false,
+        "outcome": "ABSTAIN",
+        "judge": null,
+        "p_at_k": 0,
+        "recall_at_k": 0.0,
+        "signals": {
+          "top1_score": 0.7448,
+          "mean_score": 0.6911,
+          "min_score": 0.6414,
+          "score_margin": 0.0467,
+          "score_spread": 0.1034,
+          "n_context": 4
+        },
+        "condition": "related@100",
+        "repeat": 0,
+        "n_perturbed": 4,
+        "treatment_applied": true
+      },
+      {
+        "qid": "5733fc6ed058e614000b6710",
+        "question": "What was the attack on the British weakness?",
+        "gold_answers": [
+          "Battle of Fort Bull",
+          "March Battle of Fort Bull"
+        ],
+        "is_answerable": true,
+        "prediction": "I cannot answer based on the context",
+        "gen_status": "ok",
+        "em": 0,
+        "f1": 0.0,
+        "contains_gold": 0,
+        "abstained": true,
+        "gold_in_context": false,
+        "outcome": "ABSTAIN",
+        "judge": null,
+        "p_at_k": 0,
+        "recall_at_k": 0.0,
+        "signals": {
+          "top1_score": 0.4125,
+          "mean_score": 0.4081,
+          "min_score": 0.3989,
+          "score_margin": 0.0034,
+          "score_spread": 0.0136,
+          "n_context": 4
+        },
+        "condition": "related@100",
+        "repeat": 0,
+        "n_perturbed": 4,
+        "treatment_applied": true
+      },
+      {
+        "qid": "5ad243abd7d075001a428a13",
+        "question": "Where was the Roman Catholic Priest Guyard de Moulin from?",
+        "gold_answers": [],
+        "is_answerable": false,
+        "prediction": "I cannot answer based on the context",
+        "gen_status": "ok",
+        "em": 0,
+        "f1": 0.0,
+        "contains_gold": 0,
+        "abstained": true,
+        "gold_in_context": false,
+        "outcome": "ABSTAIN",
+        "judge": null,
+        "p_at_k": 0,
+        "recall_at_k": 0.0,
+        "signals": {
+          "top1_score": 0.3353,
+          "mean_score": 0.3228,
+          "min_score": 0.3055,
+          "score_margin": 0.0437,
+          "score_spread": 0.0297,
+          "n_context": 4
+        },
+        "condition": "related@100",
+        "repeat": 0,
+        "n_perturbed": 4,
+        "treatment_applied": true
+      },
+      {
+        "qid": "5730aa52069b53140083221d",
+        "question": "Where did Charles de Gaulle and the Free French run operations during World War 2?",
+        "gold_answers": [
+          "overseas colonies"
+        ],
+        "is_answerable": true,
+        "prediction": "I cannot answer based on the context",
+        "gen_status": "ok",
+        "em": 0,
+        "f1": 0.0,
+        "contains_gold": 0,
+        "abstained": true,
+        "gold_in_context": false,
+        "outcome": "ABSTAIN",
+        "judge": null,
+        "p_at_k": 0,
+        "recall_at_k": 0.0,
+        "signals": {
+          "top1_score": 0.4358,
+          "mean_score": 0.4212,
+          "min_score": 0.3972,
+          "score_margin": 0.1223,
+          "score_spread": 0.0387,
+          "n_context": 4
+        },
+        "condition": "related@100",
+        "repeat": 0,
+        "n_perturbed": 4,
+        "treatment_applied": true
+      },
+      {
+        "qid": "57097b50200fba140036804d",
+        "question": "How many homes had BSkyB's direct-to-home satellite service available to them in 2010?",
+        "gold_answers": [
+          "10 million"
+        ],
+        "is_answerable": true,
+        "prediction": "I cannot answer based on the context",
+        "gen_status": "ok",
+        "em": 0,
+        "f1": 0.0,
+        "contains_gold": 0,
+        "abstained": true,
+        "gold_in_context": false,
+        "outcome": "ABSTAIN",
+        "judge": null,
+        "p_at_k": 0,
+        "recall_at_k": 0.0,
+        "signals": {
+          "top1_score": 0.6292,
+          "mean_score": 0.5988,
+          "min_score": 0.5876,
+          "score_margin": 0.0667,
+          "score_spread": 0.0417,
+          "n_context": 4
+        },
+        "condition": "related@100",
+        "repeat": 0,
+        "n_perturbed": 4,
+        "treatment_applied": true
+      },
+      {
+        "qid": "570d28bdb3d812140066d4a4",
+        "question": "What party is strongest in Melbourne's affluent areas?",
+        "gold_answers": [
+          "Liberal Party",
+          "Liberal Party of Australia",
+          "Liberals"
+        ],
+        "is_answerable": true,
+        "prediction": "I cannot answer based on the context",
+        "gen_status": "ok",
+        "em": 0,
+        "f1": 0.0,
+        "contains_gold": 0,
+        "abstained": true,
+        "gold_in_context": false,
+        "outcome": "ABSTAIN",
+        "judge": null,
+        "p_at_k": 0,
+        "recall_at_k": 0.0,
+        "signals": {
+          "top1_score": 0.3877,
+          "mean_score": 0.3783,
+          "min_score": 0.3698,
+          "score_margin": 0.202,
+          "score_spread": 0.0179,
           "n_context": 4
         },
         "condition": "related@100",

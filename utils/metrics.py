@@ -305,6 +305,9 @@ def score_item(qa, prediction, status, contexts, use_judge=True):
         "contains_gold": has_gold,
         "abstained": abstained,
         "gold_in_context": gold_in_context,
+        # Cheap provenance on every row: which chunks reached the generator.
+        # Enough to reconstruct an unperturbed context from the corpus.
+        "context_chunk_ids": [c.get("chunk_id") for c in contexts],
     })
 
     if abstained:
@@ -334,6 +337,15 @@ def score_item(qa, prediction, status, contexts, use_judge=True):
     if use_judge:
         verdict = judge_faithfulness(row["question"], contexts, prediction)
         row["judge"] = verdict
+        # Store the exact evidence the judge ruled on. Without it a verdict cannot
+        # be re-audited, re-scored by a second judge, or checked against a human
+        # label — and the headline metric of this study is judge-derived. Stored
+        # only on judged rows, which are a minority, so results files stay small.
+        row["judged_context"] = [
+            {"doc_id": c.get("doc_id"), "chunk_id": c.get("chunk_id"),
+             "perturbed": c.get("perturbed"), "text": c.get("text", "")}
+            for c in contexts
+        ]
         if verdict == "UNSUPPORTED":
             row["outcome"] = UNSUPPORTED
         elif verdict == "REFUSAL":
