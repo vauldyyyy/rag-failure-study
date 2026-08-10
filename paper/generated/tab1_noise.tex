@@ -4,11 +4,16 @@
 \toprule
 Condition & Correct & Abstained & Unsupported & Silent-fail & $\Delta$F1 vs clean \\
 \midrule
-clean & -- & -- & -- & -- & -- \\
+clean & 64.0 \tiny[56.0, 72.0] & 29.3 \tiny[22.0, 37.3] & 4.7 \tiny[1.3, 8.0] & 18.5 \tiny[9.3, 29.6] & -- \\
 related@25 & 60.7 \tiny[52.7, 68.7] & 31.3 \tiny[24.0, 39.3] & 4.0 \tiny[1.3, 7.3] & 20.3 \tiny[11.9, 30.5] & -0.018 \tiny[-0.051, +0.009] \\
 related@50 & 57.3 \tiny[49.3, 65.3] & 33.3 \tiny[26.0, 41.3] & 4.7 \tiny[2.0, 8.0] & 21.9 \tiny[12.5, 32.8] & -0.047 \tiny[-0.086, -0.013] \\
 related@75 & 52.0 \tiny[43.3, 60.0] & 38.0 \tiny[30.7, 46.0] & 4.7 \tiny[1.3, 8.0] & 20.8 \tiny[12.5, 30.6] & -0.093 \tiny[-0.148, -0.046] \\
 related@100 & 1.3 \tiny[0.0, 3.3] & 92.7 \tiny[88.0, 96.7] & 0.7 \tiny[0.0, 2.0] & 6.1 \tiny[2.7, 10.1] & -0.578 \tiny[-0.658, -0.502] \\
+random@50 & 58.7 \tiny[50.0, 66.7] & 32.7 \tiny[24.7, 40.7] & 5.3 \tiny[2.0, 8.7] & 21.0 \tiny[11.3, 32.3] & -0.026 \tiny[-0.064, +0.007] \\
+random@100 & 0.0 \tiny[0.0, 0.0] & 99.3 \tiny[98.0, 100.0] & 0.0 \tiny[0.0, 0.0] & 0.7 \tiny[0.0, 2.0] & -0.595 \tiny[-0.671, -0.520] \\
+counterfactual@50 & 42.0 \tiny[34.0, 50.0] & 32.7 \tiny[25.3, 40.0] & 4.7 \tiny[2.0, 8.0] & 43.7 \tiny[33.3, 54.0] & -0.204 \tiny[-0.264, -0.148] \\
+counterfactual@100 & 41.3 \tiny[33.3, 50.0] & 32.0 \tiny[24.7, 39.3] & 4.0 \tiny[1.3, 7.3] & 45.5 \tiny[35.2, 55.7] & -0.209 \tiny[-0.266, -0.149] \\
+drop\_gold@100 & 7.0 \tiny[1.8, 14.0] & 75.4 \tiny[63.2, 86.0] & 5.3 \tiny[0.0, 12.3] & 18.9 \tiny[9.4, 30.2] & -0.401 \tiny[-0.526, -0.280] \\
 \bottomrule
 \end{tabular}
 \caption{Outcome composition under each retrieval perturbation at $K=4$. All values are percentages with 95\% bootstrap confidence intervals; $\Delta$F1 is a paired bootstrap against the clean condition on the same questions. Silent-fail is the share of non-correct answers that were assertions rather than abstentions.}

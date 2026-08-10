@@ -169,7 +169,11 @@ def macros(baseline, noise, predict, manifest, synthetic, judge=None):
         # hallucination rate is flat; at total corruption it falls while abstention
         # jumps. Collapsing them into one "worst condition" figure would put a
         # decrease behind a symmetric +/- bound and misdescribe the result.
-        for label, cond in (("Partial", "related@75"), ("Total", "related@100")):
+        # Counterfactual is the condition that carries the paper: evidence present
+        # but false. Its numbers are needed separately from the absent-evidence
+        # regimes, because the two produce opposite failure modes.
+        for label, cond in (("Partial", "related@75"), ("Total", "related@100"),
+                            ("CF", "counterfactual@50")):
             if cond not in conds:
                 continue
             vs = conds[cond].get("vs_clean") or {}
@@ -187,6 +191,9 @@ def macros(baseline, noise, predict, manifest, synthetic, judge=None):
             if conds[cond].get("ci", {}).get("abstention_rate", {}).get("mean") is not None:
                 out.append(m(f"abstainAt{label}",
                              f"{100 * conds[cond]['ci']['abstention_rate']['mean']:.0f}"))
+            d_ground = vs.get("incorrect_grounded_rate")
+            if d_ground and d_ground.get("diff") is not None:
+                out.append(m(f"deltaGrounded{label}", f"{abs(100 * d_ground['diff']):.1f}"))
 
         curve = [(f, conds.get(f"related@{int(f * 100)}", {}).get("silent_failure_rate"))
                  for f in (0.25, 0.5, 0.75, 1.0)]

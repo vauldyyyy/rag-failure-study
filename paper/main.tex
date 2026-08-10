@@ -41,8 +41,8 @@
   \ifcsname #1\endcsname\csname #1\endcsname\else
   \textcolor{red}{\textbf{[NO RESULT]}}\fi}
 
-\title{Degrading Retrieval Does Not Increase Hallucination:\\
-Failure Composition in Retrieval-Augmented Generation}
+\title{Faithful to a Fault: Retrieval-Augmented Generation Repeats\\
+Corrupted Evidence Without Hallucinating}
 
 \author{
   Vauldan Dsouza \\
@@ -69,21 +69,32 @@ opposite engineering responses: a system that declines to answer, and a system t
 answers fluently and wrongly. We measure the \emph{composition} of RAG failures
 under controlled, per-item-exact retrieval corruption on \NUM{nQA} SQuAD~v2
 questions, separating unsupported assertions from answers that are wrong but
-faithful to the evidence retrieved. As corruption rises to 75\% of the context
-window, accuracy falls by \NUM{deltaCorrectPartial} points while the rate of
-unsupported assertion does not move at all: paired differences are bounded within
-$\pm$\NUM{halluBoundPartial} points of zero. The lost answers become abstentions and
-grounded errors, not fabrications. When the evidence is removed entirely, abstention
-jumps to \NUM{abstainAtTotal}\% and unsupported assertion falls further. The
-generator therefore distinguishes \emph{no} evidence from \emph{some} evidence, but
-not good evidence from bad: its abstention behaviour is threshold-like rather than
-graded, which is why partial corruption is the costly regime --- not because it
-provokes fabrication, but because it goes undetected. A manipulation check against
-naturally failed retrievals in the same corpus finds the synthetic perturbation
-reproduces unaided retrieval failure on every outcome. Retrieval score carries some
-pre-generation signal (AUROC \NUM{bestSilentAUROC} for unsupported assertion), but a
-cost analysis shows a similarity gate is worth deploying only once a fabrication is
-judged at least five times as costly as a correct answer.
+faithful to the evidence retrieved, and vary the corruption structurally rather
+than only in degree.
+
+Across three structurally different corruptions --- irrelevant passages, adjacent
+but wrong passages, and passages whose facts have been falsified --- the rate of
+unsupported assertion does not move at all. Every paired comparison against the
+clean condition is null (\(p \geq 0.78\)), with differences bounded within
+\(\pm\)\NUM{halluBoundPartial} points. What changes instead is which \emph{safe}
+failure mode absorbs the loss, and the two behave very differently.
+
+When evidence is merely absent or diluted, the generator abstains: at total
+corruption abstention reaches \NUM{abstainAtTotal}\%. When evidence is instead
+\emph{falsified}, accuracy collapses by \NUM{deltaCorrectCF} points while
+abstention does not significantly rise (\(p = 0.06\)) --- and answers that are
+wrong but faithful to the corrupted context increase roughly tenfold
+(\(+\)\NUM{deltaGroundedCF} points, \(p < 0.0001\)). The generator distinguishes
+\emph{no} evidence from \emph{some} evidence, but not true evidence from false.
+
+Faithfulness is therefore not truthfulness: a model that grounds its answers
+perfectly will repeat whatever falsehood it is given, and the standard defence of
+abstaining under uncertainty never fires, because from the generator's position
+nothing is uncertain. This locates the practical risk in corrupted knowledge
+bases rather than in hallucination, and suggests that grounding makes that
+failure mode worse rather than better. We preregistered a different prediction ---
+that silent failure would peak at partial corruption --- and report it as
+unsupported.
 \end{abstract}
 
 \section{Introduction}
@@ -105,34 +116,39 @@ identically as an accuracy drop. Existing RAG robustness benchmarks
 but neither traces how the balance between abstention and assertion moves as
 retrieval degrades continuously.
 
-We ask two questions. First, as the fraction of a context window occupied by
-related-but-wrong evidence rises from 0 to 1, how does the split between abstention
-and unsupported assertion move? Second, can that failure be anticipated from
-similarity scores alone --- signals that exist before the generator is invoked, and
-so could gate it at zero additional model cost?
+We ask three questions. First, as a context window fills with degraded evidence,
+how does the split between abstention and unsupported assertion move? Second, does
+the answer depend on \emph{how} the evidence is degraded --- absent, adjacent, or
+false? Third, can the failure be anticipated from similarity scores alone, signals
+that exist before the generator is invoked and could gate it at no model cost.
 
-We find that the fear is misplaced, at least for the system studied here.
-Degrading retrieval degrades accuracy substantially and does not increase
-fabrication at all: the generator converts lost evidence into refusals and into
-faithful reports of the wrong passage, while its rate of unsupported assertion
-stays flat within measurement error. This is invisible to any analysis that scores
-answers as merely right or wrong.
+We find the fear misplaced and the real risk elsewhere. Fabrication does not rise
+under any corruption we apply. But the two safe-looking failure modes are not
+equally safe. Missing evidence produces refusal; \emph{false} evidence produces a
+confident, well-grounded, wrong answer, and the generator gives no indication that
+anything is amiss --- its abstention rate barely moves. The property RAG is
+deployed for, faithfulness to retrieved text, is precisely what makes corrupted
+retrieval dangerous.
 
 \paragraph{Contributions.}
 \begin{enumerate}\itemsep0pt
-\item Evidence that hallucination rate is invariant to retrieval degradation over a
-      range that costs \NUM{deltaCorrectPartial} points of accuracy, with the null
-      bounded at $\pm$\NUM{halluBoundPartial} points (Table~\ref{tab:noise}), and
-      evidence that the generator's abstention is threshold-like rather than graded.
-\item A failure taxonomy that separates unsupported assertion from grounded error,
-      without which the above is unobservable, together with the finding that the
-      derived silent-failure ratio is less informative than its components.
-\item A perturbation protocol that fixes the corruption level of each individual
-      context exactly, rather than poisoning a shared index, supporting per-item
-      dose--response analysis (\S\ref{sec:method}); and a manipulation check
-      against naturally occurring retrieval failures in the same corpus.
+\item Evidence that the rate of unsupported assertion is invariant across three
+      structurally different corruptions --- irrelevant, adjacent-but-wrong, and
+      falsified evidence --- with every paired comparison null at $p \geq 0.78$
+      (Table~\ref{tab:noise}).
+\item The finding that failure mode is governed by the \emph{kind} of degradation
+      rather than its degree: absent evidence yields abstention
+      (\NUM{abstainAtTotal}\% at total corruption), while falsified evidence yields
+      a roughly tenfold increase in grounded error ($p < 0.0001$) with no
+      significant rise in abstention ($p = 0.06$).
+\item A failure taxonomy separating unsupported assertion from grounded error,
+      without which both results are unobservable, since a pooled analysis reports
+      only that accuracy fell.
+\item A perturbation protocol fixing each context's corruption exactly rather than
+      poisoning a shared index (\S\ref{sec:method}), validated against naturally
+      occurring retrieval failures in the same corpus.
 \item An evaluation of retrieval-side signals as a pre-generation abstention gate,
-      with operating points (Table~\ref{tab:predict}).
+      with operating points and a break-even cost ratio (Table~\ref{tab:predict}).
 \end{enumerate}
 
 \section{Related Work}

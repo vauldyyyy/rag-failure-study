@@ -91,10 +91,13 @@ def rebuild_2b(dataset, expected_n):
                                                   lambda r: r["outcome"] == ABSTAIN),
             "hallucination_rate": paired_diff_by_qid(control, all_rows[name],
                                                      lambda r: r["outcome"] == UNSUPPORTED),
+            "incorrect_grounded_rate": paired_diff_by_qid(
+                control, all_rows[name], lambda r: r["outcome"] == "INCORRECT_GROUNDED"),
         }
 
     # FDR across the family of conditions-vs-control, per metric.
-    for metric in ("F1", "correct_rate", "abstention_rate", "hallucination_rate"):
+    for metric in ("F1", "correct_rate", "abstention_rate", "hallucination_rate",
+                   "incorrect_grounded_rate"):
         apply_fdr({n: conditions[n]["vs_clean"].get(metric)
                    for n in conditions if n != "clean"})
 
