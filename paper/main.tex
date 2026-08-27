@@ -164,8 +164,9 @@ corruption fraction continuously and report what the model does when it is wrong
 
 \paragraph{Position and distraction effects.}
 \citet{liu2024lost} show accuracy depends on where the relevant passage sits in a
-long context. Our position experiment (\S\ref{sec:results}) is an explicit
-small-scale replication, not a new finding. \citet{shi2023distracted} document the
+long context. We hold context size fixed at $K{=}4$ throughout and do not vary
+gold position, so their effect is neither replicated nor controlled for here; it
+is a confound bounded by construction rather than measured. \citet{shi2023distracted} document the
 same sensitivity outside retrieval settings, and \citet{yoran2024robust} mitigate it
 by training; we restrict ourselves to inference-time defences.
 
@@ -348,12 +349,6 @@ hallucination rate against change in correct rate, both paired against no
 mitigation under the same degraded retrieval. Any instruction that pushes a model
 toward abstention lowers hallucination; the question is whether it lowers it faster
 than it discards correct answers. Only the upper-left quadrant is a win.
-
-\begin{figure}[t]\centering
-  \includegraphics[width=\linewidth]{../results/fig2_context_size_squad.png}
-  \caption{Answer F1 and gold-in-context rate against context size $K$.}
-  \label{fig:size}
-\end{figure}
 
 \begin{figure}[t]\centering
   \includegraphics[width=\linewidth]{../results/fig4_mitigation_tradeoff_squad.png}

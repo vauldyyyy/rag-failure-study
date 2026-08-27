@@ -2,9 +2,12 @@
 
 Two corrections to the original design:
 
-1. Mitigations are applied under the *degraded* condition (related noise at 50%,
-   the regime Phase 2b identifies as most dangerous), not on clean retrieval.
-   A defence measured on a pipeline that was not failing shows nothing.
+1. Mitigations are applied under the condition Phase 2b identified as actually
+   dangerous -- COUNTERFACTUAL at 50%, where the context states something false --
+   not on clean retrieval and not on the noise the generator already survives.
+   Under absent or diluted evidence the model abstains and needs no defence; under
+   falsified evidence it repeats the falsehood with no rise in abstention at all.
+   A defence measured where the pipeline was not failing shows nothing.
 
 2. The outcome is a trade-off, not a single number. Any prompt that pushes a model
    toward abstention will reduce hallucination — and will also refuse questions it
@@ -25,7 +28,14 @@ from utils.rerank import make_reranker
 from utils.stats import apply_fdr, paired_diff_by_qid, rate_with_ci_clustered
 
 K = 4
-NOISE_TYPE = noise_mod.RELATED
+# Repointed from RELATED to COUNTERFACTUAL after Phase 2b. Mitigations were
+# originally tested under adjacent-but-wrong evidence, chosen before the data
+# showed where the danger actually is: falsified evidence, which produces a
+# tenfold rise in grounded error with no rise in abstention. Testing prompt-level
+# defences under noise the generator already handles safely answers nothing.
+# The live question is whether any inference-time defence detects a context that
+# lies -- and the taxonomy predicts it cannot, because nothing looks uncertain.
+NOISE_TYPE = noise_mod.COUNTERFACTUAL
 NOISE_FRAC = 0.5
 
 STRICT_PROMPT = (
