@@ -72,11 +72,14 @@ questions, separating unsupported assertions from answers that are wrong but
 faithful to the evidence retrieved, and vary the corruption structurally rather
 than only in degree.
 
-Across three structurally different corruptions --- irrelevant passages, adjacent
-but wrong passages, and passages whose facts have been falsified --- the rate of
-unsupported assertion does not move at all. Every paired comparison against the
-clean condition is null (\(p \geq 0.78\)), with differences bounded within
-\(\pm\)\NUM{halluBoundPartial} points. What changes instead is which \emph{safe}
+Across nine corruption conditions spanning three structurally different
+manipulations --- irrelevant passages, adjacent but wrong passages, and passages
+whose facts have been falsified --- the rate of unsupported assertion never rises.
+Eight of nine paired comparisons against the clean condition are null after
+Benjamini--Hochberg correction, with differences bounded within
+\(\pm\)\NUM{halluBoundPartial} points; the ninth is a significant \emph{decrease}
+(total random corruption, \(q = 0.018\)), where the generator abstains on 99\% of
+questions and asserts nothing at all. What changes instead is which \emph{safe}
 failure mode absorbs the loss, and the two behave very differently.
 
 When evidence is merely absent or diluted, the generator abstains: at total
@@ -132,10 +135,11 @@ retrieval dangerous.
 
 \paragraph{Contributions.}
 \begin{enumerate}\itemsep0pt
-\item Evidence that the rate of unsupported assertion is invariant across three
-      structurally different corruptions --- irrelevant, adjacent-but-wrong, and
-      falsified evidence --- with every paired comparison null at $p \geq 0.78$
-      (Table~\ref{tab:noise}).
+\item Evidence that the rate of unsupported assertion never rises across nine
+      corruption conditions spanning three structurally different manipulations
+      --- irrelevant, adjacent-but-wrong, and falsified evidence. The only
+      change surviving FDR correction is a \emph{decrease}, under total random
+      corruption (Table~\ref{tab:noise}).
 \item The finding that failure mode is governed by the \emph{kind} of degradation
       rather than its degree: absent evidence yields abstention
       (\NUM{abstainAtTotal}\% at total corruption), while falsified evidence yields

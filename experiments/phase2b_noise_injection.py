@@ -18,7 +18,7 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import noise as noise_mod
-from utils.metrics import ABSTAIN, CORRECT, UNSUPPORTED
+from utils.metrics import ABSTAIN, CORRECT, INCORRECT_GROUNDED, UNSUPPORTED
 from utils.pipeline import (announce_budget, quota_guard, build_retrieval_cache, common_args,
                             load_dataset, run_condition, run_manifest, save_results)
 from utils.stats import apply_fdr, paired_diff_by_qid, rate_with_ci_clustered
@@ -89,7 +89,8 @@ def main():
     # Every noise condition is tested against the same clean control, so this is a
     # family of ~9 comparisons per metric. Uncorrected, one "significant" cell is
     # expected by chance alone. FDR-adjust before anything is called a finding.
-    for metric in ("F1", "abstention_rate", "hallucination_rate"):
+    for metric in ("F1", "correct_rate", "abstention_rate",
+                   "hallucination_rate", "incorrect_grounded_rate"):
         family = {name: (conditions[name].get("vs_clean") or {}).get(metric)
                   for name in conditions if name != "clean"}
         apply_fdr(family)
@@ -151,6 +152,14 @@ def _paired(control_rows, rows):
             control_rows, rows, lambda r: r["outcome"] == ABSTAIN),
         "hallucination_rate": paired_diff_by_qid(
             control_rows, rows, lambda r: r["outcome"] == UNSUPPORTED),
+        # Grounded error is the series that actually moves under counterfactual
+        # noise; omitting it here meant the paper's central comparison existed
+        # only in rebuild_results.py and vanished whenever this phase rewrote the
+        # results file.
+        "correct_rate": paired_diff_by_qid(
+            control_rows, rows, lambda r: r["outcome"] == CORRECT),
+        "incorrect_grounded_rate": paired_diff_by_qid(
+            control_rows, rows, lambda r: r["outcome"] == INCORRECT_GROUNDED),
     }
 
 
