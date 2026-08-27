@@ -28,6 +28,9 @@ PHASE_CONDITIONS = {
            "random@50", "random@100", "counterfactual@50", "counterfactual@100",
            "drop_gold@100"],
     "1": ["baseline"],
+    # Phase 4 mitigations. Order matters: "none" is the control every other
+    # condition is paired against.
+    "4": ["none", "strict_prompt", "cite_source", "bm25_rerank", "strict+rerank"],
 }
 
 
@@ -104,16 +107,72 @@ def rebuild_2b(dataset, expected_n):
     return conditions, all_rows, incomplete
 
 
+def rebuild_4(dataset, expected_n):
+    """Phase 4: mitigations paired against the unmitigated control.
+
+    The phase computes vs_none only after every mitigation finishes, so a
+    quota-interrupted run leaves conditions on disk with no paired comparisons and
+    therefore no trade-off figure. This reconstructs them from whatever completed.
+    """
+    conditions, all_rows, incomplete = {}, {}, []
+    for name in PHASE_CONDITIONS["4"]:
+        rows = load_condition(dataset, name)
+        if not rows:
+            continue
+        if expected_n and len(rows) < expected_n:
+            incomplete.append(f"{name} ({len(rows)}/{expected_n})")
+            continue  # a partial cell cannot be paired against a full control
+        valid = [r for r in rows if r["outcome"] != "INVALID"]
+        summary = aggregate(rows)
+        summary.update({
+            "condition": name,
+            "n_rows_collected": len(rows),
+            "ci": {
+                "hallucination_rate": rate_with_ci_clustered(valid, lambda r: r["outcome"] == UNSUPPORTED),
+                "abstention_rate": rate_with_ci_clustered(valid, lambda r: r["outcome"] == ABSTAIN),
+                "correct_rate": rate_with_ci_clustered(valid, lambda r: r["outcome"] == CORRECT),
+            },
+        })
+        conditions[name], all_rows[name] = summary, rows
+
+    if "none" not in conditions:
+        sys.exit("No complete 'none' control; cannot compute mitigation trade-offs.")
+
+    control = all_rows["none"]
+    for name in conditions:
+        if name == "none":
+            continue
+        conditions[name]["vs_none"] = {
+            "hallucination_rate": paired_diff_by_qid(
+                control, all_rows[name], lambda r: r["outcome"] == UNSUPPORTED),
+            "correct_rate": paired_diff_by_qid(
+                control, all_rows[name], lambda r: r["outcome"] == CORRECT),
+            "abstention_rate": paired_diff_by_qid(
+                control, all_rows[name], lambda r: r["outcome"] == ABSTAIN),
+            "incorrect_grounded_rate": paired_diff_by_qid(
+                control, all_rows[name], lambda r: r["outcome"] == "INCORRECT_GROUNDED"),
+        }
+    for metric in ("hallucination_rate", "correct_rate", "abstention_rate",
+                   "incorrect_grounded_rate"):
+        apply_fdr({n: conditions[n]["vs_none"].get(metric)
+                   for n in conditions if n != "none"})
+    return conditions, all_rows, incomplete
+
+
 def main():
     p = argparse.ArgumentParser(description="Rebuild results files from checkpoints")
-    p.add_argument("--phase", default="2b", choices=["2b"])
+    p.add_argument("--phase", default="2b", choices=["2b", "4"])
     p.add_argument("--dataset", default="squad", choices=["squad", "hotpot"])
     p.add_argument("--expected-n", type=int, default=150,
                    help="Rows per condition in a complete run; used to flag partials")
     args = p.parse_args()
 
-    conditions, all_rows, incomplete = rebuild_2b(args.dataset, args.expected_n)
-    planned = len(PHASE_CONDITIONS["2b"])
+    if args.phase == "4":
+        conditions, all_rows, incomplete = rebuild_4(args.dataset, args.expected_n)
+        planned = len(PHASE_CONDITIONS["4"])
+    else:
+        conditions, all_rows, incomplete = rebuild_2b(args.dataset, args.expected_n)
+        planned = len(PHASE_CONDITIONS["2b"])
 
     manifest = {
         "dataset": args.dataset,
@@ -133,6 +192,17 @@ def main():
         "n_answerable": sum(1 for r in all_rows.get("clean", []) if r.get("is_answerable")),
         "n_unanswerable": sum(1 for r in all_rows.get("clean", []) if not r.get("is_answerable")),
     }
+
+    if args.phase == "4":
+        manifest.update({"noise_type": "counterfactual", "noise_frac": 0.5,
+                         "mitigations_collected": len(conditions)})
+        save_results(f"phase4_fixes_{args.dataset}.json",
+                     {"manifest": manifest, "conditions": conditions, "rows": all_rows})
+        print()
+        print("Rebuilt %d/%d mitigations." % (len(conditions), planned))
+        if incomplete:
+            print(f"Skipped (partial, cannot pair): {', '.join(incomplete)}")
+        return
 
     save_results(f"phase2b_noise_{args.dataset}.json", {
         "manifest": manifest,

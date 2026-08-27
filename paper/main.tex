@@ -347,12 +347,30 @@ We state this as the weak result it is: overlap at these sample sizes is evidenc
 against a large discrepancy, not evidence of equivalence. But it is the check a
 reader is entitled to demand, and it costs nothing beyond data already collected.
 
-\paragraph{Mitigations.}
-Figure~\ref{fig:mitigation} plots each inference-time defence as a pair: change in
-hallucination rate against change in correct rate, both paired against no
-mitigation under the same degraded retrieval. Any instruction that pushes a model
-toward abstention lowers hallucination; the question is whether it lowers it faster
-than it discards correct answers. Only the upper-left quadrant is a win.
+\paragraph{Inference-time defences do not address the failure they are aimed at.}
+The standard remedy for RAG error is to instruct the model to answer only from
+retrieved text and to refuse otherwise. Evaluated under counterfactual corruption
+--- the condition Section~\ref{sec:results} identifies as dangerous --- that
+instruction fails in a specific and instructive way.
+
+Strict prompting reduces unsupported assertion from 8 items to 3
+(\(-0.033\), \(p = 0.009\)). It does so by refusing far more often
+(\(+0.167\), \(p < 0.0001\)), and the refusals are not targeted: correct answers
+fall by \(0.180\) (\(p < 0.0001\)), 62 items to 35. The exchange is roughly five
+correct answers surrendered per fabrication prevented.
+
+Grounded error --- the outcome that actually rises under corrupted evidence, and
+the reason this condition is dangerous --- does not fall at all
+(\(+0.047\), \(p = 0.245\)). The defence suppresses the failure mode that was
+never elevated and leaves untouched the one that was.
+
+This is what the taxonomy predicts. An abstention instruction can only act on a
+signal of uncertainty, and a false-but-coherent passage presents none: it is
+fluent, on-topic, and directly answers the question. The model cannot refuse
+selectively because it cannot tell which contexts are lying, so it refuses
+indiscriminately and pays for it in accuracy. Defences built to suppress
+fabrication are aimed at a different failure than the one corrupted retrieval
+produces.
 
 \begin{figure}[t]\centering
   \includegraphics[width=\linewidth]{../results/fig4_mitigation_tradeoff_squad.png}
