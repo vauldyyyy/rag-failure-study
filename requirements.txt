@@ -1,11 +1,8 @@
-google-generativeai
+google-genai>=1.0
 faiss-cpu
-tiktoken
-pandas
 numpy
+pandas
 matplotlib
-seaborn
 python-dotenv
-streamlit
-altair
-requests
+openai        # optional: --gen openai
+pytest

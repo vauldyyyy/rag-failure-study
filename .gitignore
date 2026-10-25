@@ -1,26 +1,21 @@
-# API Keys and Environment
+# API keys
 .env
 .env.*
+!.env.example
 
-# Python caches
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.pyo
-
-# Virtual Environments
+.pytest_cache/
 venv/
-env/
 .venv/
 
-# IDE files
+# IDE
 .vscode/
 .idea/
 
-# Data artifacts (too large for GH, can be regenerated natively)
-data/vector_store.index
-data/vector_store.index_map.json
-data/squad_subset.json
+# Resumable API cache (can be large; delete to force fresh calls)
+cache/
 
-# If you specifically want to push results.json, we leave results/ alone, but we ignore general tmp
-tmp/
+# Offline mock runs are for testing only
+results/mock-*/

@@ -1,92 +1,87 @@
-# When Retrieval Fails: A Study of Hallucination and Robustness in RAG Systems
+# When Retrieval Fails: Hallucination and Robustness in RAG
 
-> **Research Question:** How do noise scale, context window saturation, and zero-shot prompting strategies independently influence hallucination rates and factual recall in Retrieval-Augmented Generation (RAG) pipelines?
+> **Research question.** How do retrieval noise, conflicting evidence, context size, the position of
+> the relevant passage, and abstention prompting change hallucination and factual recall in a
+> retrieval-augmented generation (RAG) pipeline?
 
-Retrieval-Augmented Generation (RAG) is commonly treated as a panacea for Large Language Model (LLM) hallucinations. However, enterprise systems frequently struggle with retrieval noise, unanswerable queries, and context saturation. This repository presents an empirical study evaluating the failure modes of a fundamental RAG architecture. Utilizing the SQuAD v2 dataset (containing adversarial unanswerable questions) and Google's Gemini Flash architecture, this project systematically introduces retrieval noise, varies context bounds, and measures the resulting mathematical decay in factual recall and faithfulness.
+Status: **pipeline complete and tested; full model runs pending.** Results tables are generated
+from the run outputs (`python run.py report`), never typed in by hand.
 
----
+## Design
 
-## Methodology & Experimental Design
+Data come from the **SQuAD v2.0 dev set**, which mixes answerable questions with adversarial
+*unanswerable* ones (written against a real paragraph so they look answerable from it).
 
-The study is executed across four distinct, isolated phases to measure robust parameter relationships. The dataset consists of a 600 QA pair subset from SQuAD v2 (70% answerable, 30% unanswerable) vectorized into a local FAISS index via `models/gemini-embedding-001` (3072-dim).
+| Part | Construction |
+|---|---|
+| Base corpus | Every paragraph of 12 seeded-random Wikipedia articles (397 passages). Same-article paragraphs act as on-topic hard negatives. |
+| Questions | 300 answerable + 150 unanswerable, sampled from those articles (seed 13). |
+| Noise pool | 807 paragraphs from the 23 *other* articles, in a fixed shuffled order; noise level *n* adds the first *n*, so levels are nested. |
+| Counterfactuals | For each answerable question, a copy of its source paragraph with the gold answer replaced by a same-type answer from another question. |
+| Retrieval | `gemini-embedding-001` (768-d, L2-normalised) + FAISS inner-product search. |
+| Generation | `gemini-2.5-flash`, temperature 0, thinking off, short-answer prompt. Any OpenAI-compatible model can be swapped in for cross-model runs. |
 
-- **Phase 1: Baseline Integrity (`phase1_baseline.py`)** 
-  Establishes the control metrics. Evaluates standard RAG performance with $K=3$ retrieval via FAISS cosine similarity (inner product) with no added noise. 
-  
-- **Phase 2b: Noise Injection Degradation (`phase2b_noise_injection.py`)**
-  Poisons the retrieval context. Injects up to 500 irrelevant documents into the FAISS index to measure how semantic similarity boundaries break down, and how often the LLM hallucinates over distractor text.
-  
-- **Phase 2c: Context Saturation (`phase2c_context_size.py`)**
-  Evaluates the "Lost in the Middle" phenomenon. Scales retrieval context $K$ from 1 to 10, measuring whether expanded semantic breadth actively harms precision or faithfulness.
-  
-- **Phase 4: Robustness & Filtering (`phase4_fixes.py`)**
-  Implements architectural mitigation. Explores stricter zero-shot prompt framing, retrieval reranking, and explicit "I don't know" classification heuristics to mathematically suppress the hallucination rate measured in Phase 2.
+### Experiments
 
----
+| ID | Manipulation | Questions |
+|---|---|---|
+| E1 | Baseline: K=3, no noise, default prompt | all |
+| E2 | 0 / 100 / 250 / 500 off-topic distractors in the index | all |
+| E2b | Counterfactual paragraphs in the index (conflicting evidence) | answerable |
+| E3 | K = 1, 2, 3, 5, 7, 10 retrieved passages | all |
+| E4 | 10 passages, gold paragraph forced to position 1 / 3 / 5 / 7 / 10 ("lost in the middle") | answerable |
+| E5 | Prompt open / default / strict × noise 0 / 500 | all |
 
-## Evaluation Metrics
+### Metrics
 
-To ensure academic rigor, qualitative responses are mathematically judged against strict ground-truth pairs via lexical scoring and an independent LLM-as-a-judge module.
+- **EM / F1** on answerable questions, official SQuAD normalisation, max over gold answers.
+- **Hallucination rate**: share of *unanswerable* questions the model answered instead of abstaining.
+- **Over-refusal**: share of *answerable* questions the model refused. E5 measures the trade-off between the two.
+- **Retrieval hit@K and MRR** of the source paragraph.
+- **Misled rate** (E2b): the model returned the planted counterfactual answer when that paragraph was retrieved.
+- **Faithfulness** (`--judge`): an LLM judge, shown the same context, labels each non-abstained answer SUPPORTED / UNSUPPORTED.
+- Every metric reports a **95% bootstrap CI**; condition contrasts use a **paired bootstrap** on the same questions.
 
-1. **Exact Match (EM):** Binary percentage of generations that precisely match the target strings after stripping punctuation and articles.
-2. **F1 Score:** Harmonic mean of precision and recall over token-level overlap. Captures partial correctness independent of strict formatting.
-3. **Precision@K (P@K):** Retrieval metric evaluating if the single ground-truth document was present in the top $K$ semantic search results.
-4. **Hallucination Rate:** The percentage of model generations that assert false facts specifically for *unanswerable* domain questions instead of cleanly refusing.
-5. **Faithfulness Score:** An LLM-as-a-judge secondary pass (via Gemini Flash) that cross-examines the generation strictly against the provided context. Evaluates to 0 if the generated claim diverges from the provided chunks.
+## Running it
 
----
-
-## Empirical Results
-
-| Metric | Baseline (Phase 1) | +Noise (500 Docs) | Context $K=10$ | +Strict Prompt & Fixes |
-|--------|--------------------|-------------------|----------------|------------------------|
-| **Exact Match (EM)** | *[ 00.0% ]* | *[ 00.0% ]* | *[ 00.0% ]* | *[ 00.0% ]* |
-| **F1 Score** | *[ 00.0% ]* | *[ 00.0% ]* | *[ 00.0% ]* | *[ 00.0% ]* |
-| **Precision@K** | *[ 00.0% ]* | *[ 00.0% ]* | *[ 00.0% ]* | *[ 00.0% ]* |
-| **Hallucination Rate** | *[ 00.0% ]* | *[ 00.0% ]* | *[ 00.0% ]* | *[ 00.0% ]* |
-| **Faithfulness** | *[ 00.0% ]* | *[ 00.0% ]* | *[ 00.0% ]* | *[ 00.0% ]* |
-
-> *Visualizations mapping the exact decay curve of these metrics over time are available in the `/results` directory after complete execution.*
-
-### Key Findings
-
-- **[Insight 1 Placeholder]** (e.g., *Noise injection past 100 documents systematically caused EM to drop by X%, indicating that raw cosine similarity struggles to penalize semantically adjacent distractor paragraphs.*)
-- **[Insight 2 Placeholder]** (e.g., *Increasing context window to $K=10$ ironically increased the Hallucination Rate for unanswerable questions to Y%, verifying the presence of "lost in the middle" attention phenomena.*)
-- **[Insight 3 Placeholder]** (e.g., *Strict prompt heuristics alongside context reranking reduced total hallucination rates by Z%, demonstrating that generative boundaries are highly sensitive to explicit instruction over implicit context.*)
-
----
-
-## Execution Guide
-
-To reproduce this study's findings locally:
-
-**1. Environment Setup**
 ```bash
-python -m venv venv
-source venv/bin/activate  # Or `venv\Scripts\activate` on Windows
+python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env            # add GEMINI_API_KEY
+
+python run.py build-data        # data/processed/dataset.json (already committed)
+python run.py plan              # API calls needed (~9.5k upper bound, ~9.5M input tokens)
+python run.py run E1 --limit 20 # smoke test on 20 questions
+python run.py run all --judge   # full study; safe to stop and resume
+python run.py report            # results/<model>/RESULTS.md + figures/
 ```
 
-**2. Authentication**
-Copy the environment template and insert your active Google API key (Free Tier compatible).
-```bash
-cp .env.example .env
-# Edit .env to add GEMINI_API_KEY=AIza...
+- Every embedding and response is cached in `cache/cache.sqlite`, keyed by its exact inputs. An
+  interrupted run resumes, and prompts shared between experiments are paid for once.
+- On the free tier set `RAG_RPM` to your requests-per-minute limit; a full run then spans several
+  days of quota. On a paid key, `--workers 4` parallelises requests.
+- `--gen openai` with `OPENAI_BASE_URL` (Groq, OpenRouter, Ollama) runs the same experiments on a
+  second model; results go to a separate `results/<model>/` folder for comparison.
+- `python -m pytest` runs the suite offline using a deterministic mock backend
+  (`--gen mock --embed mock`). Mock numbers are not results.
+
+## Layout
+
+```
+config.py              all settings (seed, sample sizes, conditions, models)
+run.py                 CLI: build-data | plan | run | report
+ragstudy/data.py       dataset, distractor pool, counterfactuals
+ragstudy/study.py      experiment definitions, retrieval, runner
+ragstudy/backends.py   Gemini, OpenAI-compatible, offline mock
+ragstudy/metrics.py    SQuAD scoring, abstention detection, bootstrap statistics
+ragstudy/prompts.py    answer and judge prompts
+analysis/report.py     tables, paired tests, figures
+docs/paper_outline.md  structure for the write-up
+tests/                 unit + end-to-end tests
 ```
 
-**3. Run the Evaluation Suite**
-The execution script automatically downloads SQuAD v2, processes adversarial chunk limits, builds the FAISS databases, and tests the LLM orchestration.
+## Known limitations
 
-```bash
-# 1. Ingest Data
-python data/load_squad.py
-
-# 2. Run Phased Experiments (Sequential)
-python experiments/phase1_baseline.py
-python experiments/phase2b_noise_injection.py
-python experiments/phase2c_context_size.py
-python experiments/phase4_fixes.py
-
-# 3. Generate Analytical Plots
-python visualize_results.py
-```
+- One embedding model; distractors are off-topic Wikipedia paragraphs (E2b covers on-topic conflict).
+- Abstention is detected by pattern; spot-check `results/*/E5/open_*.jsonl`, where the model was never told the token.
+- The faithfulness judge is the same model family as the generator; report judge agreement on a hand-labelled sample before relying on it.
