@@ -107,8 +107,8 @@ def table_noise(data):
     return "\n".join(lines)
 
 
-XMODEL_CONDS = ["clean", "related@75", "related@100", "random@100",
-                "counterfactual@50", "counterfactual@100"]
+XMODEL_CONDS = ["clean", "related@100", "random@100",
+                "counterfactual@50"]
 
 
 def table_crossmodel(primary, second):
@@ -129,30 +129,29 @@ def table_crossmodel(primary, second):
     for gi, (model, data) in enumerate(gens):
         conds = data["conditions"]
         for i, name in enumerate(XMODEL_CONDS):
-            c = (conds.get(name) or {}).get("ci", {})
-            g = grounded_ci(data, name)
             label = esc(model.replace("models/", "")) if i == 0 else ""
-            lines.append(
-                f"{label} & {esc(name)} & {pct_ci(c.get('correct_rate'))} & "
-                f"{pct_ci(c.get('abstention_rate'))} & {pct_ci(c.get('hallucination_rate'))} & "
-                f"{pct_ci(g)} \\\\")
+            cells = " & ".join(row_pct(data, name, o) for o in
+                               ("CORRECT", "ABSTAIN", "UNSUPPORTED", "INCORRECT_GROUNDED"))
+            lines.append(f"{label} & {esc(name)} & {cells} \\\\")
         if gi == 0:
             lines.append("\\midrule")
     lines += [
         "\\bottomrule", "\\end{tabular}}",
         "\\caption{Cross-family replication on the same 150 questions, retrieval and "
         "perturbations. Percentages; the second generator is an open-weights model "
-        "from a different family. Judge and scoring are identical.}",
+        "from a different family. Judge and scoring are identical; invalid generations "
+        "are excluded.}",
         "\\label{tab:xmodel}", "\\end{table}",
     ]
     return "\n".join(lines)
 
 
-def pct_ci(c):
-    """Point estimate only, for the compact cross-model table."""
-    if not c or c.get("mean") is None:
+def row_pct(data, name, outcome):
+    """Observed rate over valid rows: the exact rate, not a bootstrap mean."""
+    rows = [r for r in data["rows"].get(name, []) if r["outcome"] != "INVALID"]
+    if not rows:
         return "--"
-    return f"{100 * c['mean']:.1f}"
+    return f"{100 * sum(r['outcome'] == outcome for r in rows) / len(rows):.1f}"
 
 
 def sensitivity_macros(sens):
@@ -185,6 +184,19 @@ def sensitivity_macros(sens):
                 m(f"ruleOnlyBound{suffix}", f"{ro['null_bound_pts']:.1f}")]
         cf = run["reclassified_grounded"]["counterfactual@50"]
         out.append(m(f"reclassGroundedCF{suffix}", f"{100 * cf['diff']:+.1f}"))
+    miss = (sens.get("gemma") or {}).get("missingness")
+    if miss:
+        ref, cc = miss["reference_clean"], miss["counterfactual@50"]
+        out += [m("nCompleteTwo", miss["n_complete"]), m("nExcludedTwo", miss["n_excluded"]),
+                m("nLoopingTwo", miss["n_excluded_5plus"]),
+                m("ccHalluUpTwo", len(miss["hallucination"]["up"])),
+                m("ccHalluUpperTwo", f"{miss['hallucination']['max_upper_pts']:+.1f}"),
+                m("refUnsupExcluded", f"{ref['unsupported']['excluded']:.1f}"),
+                m("refUnsupComplete", f"{ref['unsupported']['complete']:.1f}")]
+        for key, tag in (("correct", "Correct"), ("abstain", "Abstain"), ("grounded", "Grounded")):
+            out.append(m(f"ccDelta{tag}Two", f"{100 * cc[key]['diff']:+.1f}"))
+        dep = sens["gemma"]["dependence"]
+        out.append(m("invalidPctTwo", f"{100 * dep['n_invalid'] / dep['n_rows']:.1f}"))
     return out
 
 
@@ -227,10 +239,8 @@ def crossmodel_macros(second):
         if d and d.get("diff") is not None:
             out += [m(f"cfDelta{tag}Two", f"{100 * d['diff']:+.1f}"),
                     m(f"cfQ{tag}Two", p_str(d.get("q_value")))]
-    g0, g1 = grounded_ci(second, "clean"), grounded_ci(second, "counterfactual@50")
-    if g0 and g1:
-        out += [m("groundedCleanTwo", f"{100 * g0['mean']:.1f}"),
-                m("groundedCFTwo", f"{100 * g1['mean']:.1f}")]
+    out += [m("groundedCleanTwo", row_pct(second, "clean", "INCORRECT_GROUNDED")),
+            m("groundedCFTwo", row_pct(second, "counterfactual@50", "INCORRECT_GROUNDED"))]
     for name, tag in (("related@100", "Related"), ("random@100", "Random")):
         c = (conds.get(name) or {}).get("ci", {}).get("abstention_rate")
         if c and c.get("mean") is not None:

@@ -65,3 +65,19 @@ capped. Such items now get one retry after a 45 s read timeout and are then
 recorded as `gen_status: error` (INVALID: excluded from every rate, counted in
 `n_invalid`, reported in the paper). Before this, each one consumed fifteen
 attempts, about fifteen minutes. Checkpoints are written every five items.
+
+## Outcome
+
+| | |
+|---|---|
+| Generations | 1,500 (10 conditions x 150 questions) |
+| Invalid | 162 (10.8%) across 46 questions; 20 questions fail in 5 or more conditions and account for 126 rows |
+| Hallucination vs clean | up in 0 of 9 conditions, 3 significant decreases, 6 null; no 95% CI above +2.5 points |
+| 50% counterfactual | correct -19.5 points, grounded error +18.7 (3.1% to 22.0%), abstention +0.8 (q = 0.846) |
+| Complete-case (104 questions) | correct -19.2, grounded +18.3, abstention +1.0; hallucination up in 0 of 9 |
+
+Invalid rows were retried in a repair pass (`LLM_RPM=2`, `GEN_TIMEOUT=90`) after the
+main run, which reduced them from 184 to 162; the rest are the reasoning loops above
+or persistent server errors. Loss is not random: in the fully observed primary run,
+the 46 affected questions have a clean unsupported rate of 8.7% against 2.9% for the
+other 104. `experiments/phase7_judge_sensitivity.py` computes all of this.

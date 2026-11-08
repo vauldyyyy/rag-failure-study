@@ -62,396 +62,220 @@ Every number below is a stub artefact. Not submittable.}}\end{center}
 \fi
 
 \begin{abstract}
-Retrieval-augmented generation is widely deployed on the premise that grounding a
-language model in retrieved text suppresses hallucination, and the corresponding
-fear is that degraded retrieval reintroduces it. Prior work measures how accuracy
-decays as retrieval quality falls, but accuracy pools outcomes that call for
-opposite engineering responses: a system that declines to answer, and a system that
-answers fluently and wrongly. We measure the \emph{composition} of RAG failures
-under controlled, per-item-exact retrieval corruption on \NUM{nQA} SQuAD~v2
-questions, separating unsupported assertions from answers that are wrong but
-faithful to the evidence retrieved, and vary the corruption structurally rather
-than only in degree.
-
-Across nine corruption conditions spanning four perturbations --- irrelevant
-passages, adjacent but wrong passages, passages whose facts have been falsified,
-and removal of the answer-bearing passage --- the rate of unsupported assertion
-never rises.
-Eight of nine paired comparisons against the clean condition are null after
-Benjamini--Hochberg correction, and no condition's 95\% interval extends above
-\(\NUM{halluMaxUpper}\) points; the ninth is a significant \emph{decrease}
-(total random corruption, \(q = 0.018\)), where the generator abstains on 99\% of
-questions and asserts nothing at all. What changes instead is which \emph{safe}
-failure mode absorbs the loss, and the two behave very differently.
-
-When evidence is merely absent or diluted, the generator abstains: at total
-corruption abstention reaches \NUM{abstainAtTotal}\%. When evidence is instead
-\emph{falsified}, accuracy collapses by \NUM{deltaCorrectCF} points while
-abstention does not significantly rise (\(p = 0.06\)) --- and answers that are
-wrong but faithful to the corrupted context increase roughly tenfold
-(\(+\)\NUM{deltaGroundedCF} points, \(p < 0.0001\)). The generator distinguishes
-\emph{no} evidence from \emph{some} evidence, but not true evidence from false.
-
-Faithfulness is therefore not truthfulness: a model that grounds its answers
-perfectly will repeat whatever falsehood it is given, and the standard defence of
-abstaining under uncertainty never fires, because from the generator's position
-nothing is uncertain. This locates the practical risk in corrupted knowledge
-bases rather than in hallucination, and suggests that grounding makes that
-failure mode worse rather than better. We preregistered a different prediction ---
-that silent failure would peak at partial corruption --- and report it as
-unsupported.
+Retrieval-augmented generation (RAG) is deployed on the premise that grounding
+suppresses hallucination, and the corresponding fear is that degraded retrieval
+reintroduces it. We measure the \emph{composition} of RAG failures under
+per-item-exact corruption on \NUM{nQA} SQuAD~v2 questions, across nine conditions
+spanning irrelevant, adjacent-but-wrong, falsified and removed evidence, and
+replicate the full grid on a generator from a second model family. Unsupported
+assertion rises in no condition for either generator after FDR correction (no 95\%
+interval above \(\NUM{halluMaxUpper}\) and \(\NUM{halluMaxUpperTwo}\) points). What
+changes is which failure absorbs the loss. When evidence is absent, generators
+abstain. When it is falsified, accuracy falls by \NUM{deltaCorrectCF} and
+\(\NUM{cfDeltaCorrectTwo}\) points, abstention does not significantly rise, and
+answers that are wrong but faithful to the corrupted context rise by
+\(+\)\NUM{deltaGroundedCF} and \(\NUM{cfDeltaGroundedTwo}\) points
+(\(q < 0.0001\) for both). The generators distinguish \emph{no} evidence from
+\emph{some} evidence, but not true evidence from false, so the defence of abstaining
+under uncertainty never fires. An independent judge did not reproduce the primary
+judge's \textsc{unsupported} labels; both findings survive discarding those labels. A
+preregistered prediction that silent failure peaks at partial corruption was not
+supported.
 \end{abstract}
 
 \section{Introduction}
-Retrieval-augmented generation \citep{lewis2020rag} is the standard industrial
-answer to hallucination: retrieve evidence, condition on it, and the model stops
-inventing. The premise holds only as far as retrieval does, and in deployment it
-often does not --- knowledge bases contain near-duplicates, the answer-bearing
-passage is frequently absent, and the top-$k$ neighbours of a query are routinely
-topically adjacent but wrong.
-
-What matters when retrieval fails is not only \emph{how much} accuracy falls but
-\emph{what the system does instead}. A RAG system that responds ``I cannot answer
-from the context'' has failed safely; one that produces a confident, fluent, wrong
-answer from the same broken context has failed dangerously. Both register
-identically as an accuracy drop. Existing RAG robustness benchmarks
+RAG \citep{lewis2020rag} is the standard industrial answer to hallucination: retrieve
+evidence, condition on it, and the model stops inventing. The premise holds only as
+far as retrieval does. What matters when retrieval fails is not only \emph{how much}
+accuracy falls but \emph{what the system does instead}. A system that says ``I cannot
+answer from the context'' has failed safely; one that answers fluently and wrongly
+has not, yet both register identically as an accuracy drop. RAG benchmarks
 \citep{chen2024rgb,cuconasu2024noise} report accuracy under noise, and
-\citet{chen2024rgb} additionally scores \emph{negative rejection} as a capability,
-but neither traces how the balance between abstention and assertion moves as
-retrieval degrades continuously.
+\citet{chen2024rgb} score negative rejection as a capability, but neither traces how
+the balance between abstention and assertion moves as retrieval degrades.
 
-We ask three questions. First, as a context window fills with degraded evidence,
-how does the split between abstention and unsupported assertion move? Second, does
-the answer depend on \emph{how} the evidence is degraded --- absent, adjacent, or
-false? Third, can the failure be anticipated from similarity scores alone, signals
-that exist before the generator is invoked and could gate it at no model cost.
-
-We find the fear misplaced and the real risk elsewhere. Fabrication does not rise
-under any corruption we apply. But the two safe-looking failure modes are not
-equally safe. Missing evidence produces refusal; \emph{false} evidence produces a
-confident, well-grounded, wrong answer, and the generator gives no indication that
-anything is amiss --- its abstention rate barely moves. The property RAG is
-deployed for, faithfulness to retrieved text, is precisely what makes corrupted
-retrieval dangerous.
-
-That models adopt coherent false evidence is not itself new: the knowledge-conflict
-literature has shown it repeatedly \citep{xie2024chameleon,wu2024clasheval}. What
-that literature does not measure is the rest of the outcome distribution --- whether
-unsupported assertion moves at the same time, and whether abstention responds to
-falsified evidence the way it responds to absent evidence. Our contribution is that
-decomposition, under matched manipulations within a single design.
-
-\paragraph{Contributions.}
+We find the fear of fabrication misplaced and the real risk elsewhere. Missing
+evidence produces refusal; \emph{false} evidence produces a confident, grounded, wrong
+answer with no sign that anything is amiss. That models adopt coherent false evidence
+is not new \citep{xie2024chameleon,wu2024clasheval}. What that literature does not
+measure is the rest of the outcome distribution: whether unsupported assertion moves
+at the same time, and whether abstention responds to falsified evidence as it does to
+absent evidence. Our contribution is that decomposition, within one matched design:
 \begin{enumerate}\itemsep0pt
-\item Evidence that the rate of unsupported assertion never rises across nine
-      corruption conditions spanning four perturbations --- irrelevant,
-      adjacent-but-wrong, falsified, and removed evidence. The only
-      change surviving FDR correction is a \emph{decrease}, under total random
-      corruption (Table~\ref{tab:noise}).
-\item The finding, within one design, that failure mode is governed by the
-      \emph{kind} of degradation rather than its degree: absent evidence yields abstention
-      (\NUM{abstainAtTotal}\% at total corruption), while falsified evidence yields
-      a roughly tenfold increase in grounded error ($p < 0.0001$) with no
-      significant rise in abstention ($p = 0.06$).
-\item A failure taxonomy separating unsupported assertion from grounded error,
-      without which both results are unobservable, since a pooled analysis reports
-      only that accuracy fell.
-\item A perturbation protocol fixing each context's corruption exactly rather than
-      poisoning a shared index (\S\ref{sec:method}), validated against naturally
-      occurring retrieval failures in the same corpus.
-\item An evaluation of retrieval-side signals as a pre-generation abstention gate,
-      with operating points and a break-even cost ratio (Table~\ref{tab:predict}).
+\item unsupported assertion rises under none of nine corruption conditions, for
+      either of two generators from different families (Tables~\ref{tab:noise},
+      \ref{tab:xmodel});
+\item failure mode is governed by the \emph{kind} of degradation: absent evidence
+      yields abstention, while falsified evidence yields grounded error with no
+      significant rise in abstention;
+\item a taxonomy separating unsupported assertion from grounded error, without which
+      neither result is observable, and a perturbation protocol that fixes each
+      context's corruption exactly;
+\item a direct test of how far these conclusions depend on the LLM judge.
 \end{enumerate}
 
 \section{Related Work}
-\paragraph{RAG robustness benchmarks.}
-\citet{chen2024rgb} introduce RGB and evaluate noise robustness, negative
-rejection, information integration and counterfactual robustness; our four
-perturbations follow that taxonomy and we claim no novelty for it.
-\citet{cuconasu2024noise} report the counter-intuitive result that inserting
-\emph{random} documents can raise accuracy while related, non-answer-bearing
-documents depress it. Both report accuracy under a fixed noise setting; we vary the
-corruption fraction continuously and report what the model does when it is wrong.
-
-\paragraph{Knowledge conflicts and corrupted evidence.}
-Our counterfactual condition is a context--memory conflict in the terms of
-\citet{xu2024conflictsurvey}, and its construction follows \citet{longpre2021conflicts}.
-\citet{xie2024chameleon} find that models readily accept coherent external evidence
-that contradicts their parametric memory, and \citet{wu2024clasheval} find that six
-models, GPT-4o among them, adopt incorrect retrieved content over a correct prior
-answer more than 60\% of the time. Our accuracy collapse under falsified evidence
-replicates that direction. These studies measure \emph{which answer} a model adopts;
-they do not separate an adopted falsehood from an unsupported assertion, and they do
-not compare the model's abstention response to falsified versus absent evidence,
-which is where our results differ most. \citet{zou2025poisonedrag} show that a few
-optimised malicious passages can steer a RAG system to an attacker-chosen answer. Our
-substitutions are not optimised --- a single answer string is replaced --- which
-suggests the failure needs no adversary: ordinary errors in a knowledge base would be
-repeated in the same way.
-
-\paragraph{Position and distraction effects.}
-\citet{liu2024lost} show accuracy depends on where the relevant passage sits in a
-long context. We hold context size fixed at $K{=}4$ throughout and do not vary
-gold position, so their effect is neither replicated nor controlled for here; it
-is a confound bounded by construction rather than measured. \citet{shi2023distracted} document the
-same sensitivity outside retrieval settings, and \citet{yoran2024robust} mitigate it
-by training; we restrict ourselves to inference-time defences.
-
-\paragraph{Abstention and confidence.}
-\citet{kadavath2022know} elicit confidence from model internals and
-\citet{asai2024selfrag} train a model to critique its own retrievals. Both require
-model access or additional generation. We ask how far a retrieval score --- already
-computed, free, and available before generation --- gets on its own, which sets the
-baseline such methods must beat. Automated RAG evaluation frameworks
-\citep{es2024ragas,saadfalcon2024ares} provide faithfulness metrics; our judge is
-narrower by design, labelling only whether each claim is entailed by the context
-actually shown to the generator.
+\citet{chen2024rgb} evaluate noise robustness, negative rejection, information
+integration and counterfactual robustness; our perturbations follow that taxonomy and
+we claim no novelty for it. \citet{cuconasu2024noise} find that random documents can
+raise accuracy while related ones depress it. Our counterfactual condition is a
+context--memory conflict \citep{xu2024conflictsurvey} constructed following
+\citet{longpre2021conflicts}. \citet{wu2024clasheval} find six models adopt incorrect
+retrieved content over a correct prior more than 60\% of the time, and our accuracy
+collapse replicates that direction; such studies measure \emph{which answer} is
+adopted and do not compare abstention under falsified versus absent evidence.
+\citet{zou2025poisonedrag} steer RAG with optimised malicious passages. Ours are not
+optimised --- one answer string is replaced --- which suggests the failure needs no
+adversary. \citet{liu2024lost} show accuracy depends on passage position; we fix
+$K{=}4$ and do not vary position. Confidence-based abstention
+\citep{kadavath2022know,asai2024selfrag} needs model access or extra generation; we
+test retrieval scores, which are free. RAG evaluation frameworks
+\citep{es2024ragas,saadfalcon2024ares} supply faithfulness metrics; our judge is
+narrower, ruling only on the context actually shown.
 
 \section{Method}
 \label{sec:method}
-\paragraph{Data.}
-\NUM{nQA} questions sampled from the SQuAD~v2 development set
-\citep{rajpurkar2018squad2} with seed \NUM{randomSeed}: \NUM{nAnswerable}
-answerable and \NUM{nUnanswerable} unanswerable. The unanswerable split is
-essential rather than incidental --- the gold paragraph is present in the index and
-topically perfect, yet contains no answer, which isolates abstention pressure from
-retrieval quality. The corpus is every paragraph in the split, chunked at 256
-tokens with 50-token overlap. Embeddings come from \NUM{embedModel} run locally on
-CPU; retrieval is exact inner product over L2-normalised vectors (FAISS
-\texttt{IndexFlatIP}), not an approximate index, so no ANN error is added to the
-error under study. A local retriever makes the retrieval half of the pipeline
-deterministic and reproducible without API access; it is also weaker than a
-frontier embedding model, so absolute accuracy here is not comparable to SQuAD
-leaderboard numbers, and more items fall into the evidence-absent regime the study
-targets. The generator is \NUM{genModel} at temperature 0. Judging
-(below) uses a different checkpoint, \NUM{judgeModel}, for every perturbation and
-mitigation condition; the clean baseline of Section~\ref{sec:results} was judged
-earlier by \NUM{judgeModelBaseline}. Neither judge is the generator.
+\paragraph{Data and models.}
+\NUM{nQA} questions from the SQuAD~v2 development set \citep{rajpurkar2018squad2}, seed
+\NUM{randomSeed}: \NUM{nAnswerable} answerable and \NUM{nUnanswerable} unanswerable.
+The corpus is every paragraph in the split, chunked at 256 tokens with 50-token
+overlap, embedded with \NUM{embedModel} and searched exactly (FAISS
+\texttt{IndexFlatIP}). The generators, at temperature 0, are \NUM{genModel} and the
+open-weights \NUM{genModelTwo}. Perturbation conditions are judged by \NUM{judgeModel};
+the primary run's clean baseline by \NUM{judgeModelBaseline}. No judge is a generator.
 
 \paragraph{Perturbations.}
-Corruption is applied to the context handed to the generator, not to the index.
-Poisoning a shared index makes the noise level a property of the run: an individual
-answer cannot be attributed to a known corruption level. Perturbing the context
-fixes the fraction exactly per item and holds retrieval byte-identical across
-conditions, so two conditions differ only in the named variable. We use four
-perturbations --- \textsc{random} (irrelevant chunks), \textsc{related}
-(lower-ranked real retrievals: adjacent, plausible, wrong), \textsc{counterfactual}
-(the gold answer string in context replaced by a false one, following
-\citet{longpre2021conflicts}), and \textsc{drop\_gold} (all gold chunks removed
-while the question remains answerable) --- at fractions $\{0.25, 0.5, 0.75, 1.0\}$
-of a $K{=}4$ context. Each results row records how many slots were actually
-perturbed, since \textsc{counterfactual} is a no-op when the gold string is absent
-from the retrieved text.
+Corruption is applied to the context handed to the generator, not to the index, so the
+fraction is exact per item and retrieval is byte-identical across conditions. We use
+\textsc{random} (irrelevant chunks), \textsc{related} (lower-ranked real retrievals:
+plausible, wrong), \textsc{counterfactual} (the gold answer string replaced by a false
+one \citep{longpre2021conflicts}) and \textsc{drop\_gold} (gold chunks removed) at
+fractions of a $K{=}4$ context.
 
-\paragraph{Outcome taxonomy.}
-Every generation is assigned exactly one label: \textsc{abstain} (declined),
-\textsc{correct} (token F1 $\geq 0.5$ against gold), \textsc{unsupported} (asserts
-something the retrieved context does not support), \textsc{incorrect\_grounded}
-(wrong, but traceable to the context), or \textsc{invalid} (blocked or errored
-generation, excluded from all rates). Only \textsc{unsupported} counts as
-hallucination. Separating it from \textsc{incorrect\_grounded} is the point:
-pooling them turns ``retrieval was bad, so the answer was bad'' into an apparent
-finding about generation. Abstention is detected by rule; a refusal phrase followed
-by a claim (``the context does not say, but it was 1241'') is scored as an
-assertion, not an abstention.
-
-\paragraph{Judging, and how little rests on it.}
-For answerable items that were neither abstentions nor correct, a judge sees the
-question, the answer, and \emph{the context that was actually shown to the
-generator}, and labels each answer supported or unsupported. Unanswerable items
-need no judge: SQuAD~v2 guarantees no answer exists, so any assertion is
-unsupported by construction.
-
-The consequence is worth stating precisely, because a study whose primary outcome
-is assigned by a language model invites the obvious objection. Across
-\NUM{nScoredRows} scored generations the judge is invoked on
-\NUM{judgeInvocationPct}\% of items, and of the \NUM{nUnsupported} unsupported
-labels that constitute the headline metric, \NUM{nUnsupportedRule} follow from the
-rule and \NUM{nUnsupportedJudged} from the judge. The primary outcome is therefore
-\NUM{ruleDerivedPct}\% rule-derived, and Section~\ref{sec:results} tests directly
-whether the result survives discarding the judged subset.
-
-Every judged row now stores the exact context the judge ruled on, so any verdict
-can be re-audited or re-scored by a second model. Rows collected before this was
-added cannot be: reconstructing their context would require replaying a stochastic
-perturbation and assuming it landed identically. We report that limitation rather
-than assert reproducibility we cannot demonstrate. We also
-track \emph{parametric} correctness --- items answered correctly with the gold
-document absent from context --- because such items inflate every clean-condition
-baseline and are rarely separated out.
+\paragraph{Outcomes.}
+Each generation receives one label: \textsc{abstain}; \textsc{correct} (token F1
+$\geq 0.5$); \textsc{unsupported} (asserts what the context does not support);
+\textsc{incorrect\_grounded} (wrong, but traceable to the context); or \textsc{invalid}
+(no usable generation, excluded from rates). Only \textsc{unsupported} counts as
+hallucination. Abstention is detected by rule, and a refusal followed by a claim counts
+as an assertion. For answerable items neither abstained nor correct, a judge sees the
+question, answer and the context shown and rules on support. Unanswerable items need no
+judge: any assertion is unsupported by construction. Of \NUM{nScoredRows} scored
+primary generations the judge was invoked on \NUM{judgeInvocationPct}\%, and
+\NUM{ruleDerivedPct}\% of the \NUM{nUnsupported} unsupported labels are rule-derived.
 
 \paragraph{Statistics.}
-Rates carry 95\% percentile bootstrap intervals over questions. Comparisons between
-conditions are paired bootstraps on the same questions, reported with two-sided
-$p$. Where a condition is sampled more than once per item, samples are averaged
-within an item before resampling, so repeated sampling cannot shrink an interval.
-Comparisons against the clean condition form one family per outcome and are
-corrected with the Benjamini--Hochberg procedure \citep{benjamini1995fdr}; we report
-the adjusted $q$ wherever a claim depends on significance.
+Rates carry 95\% bootstrap intervals over questions. Comparisons are paired bootstraps
+on the same questions; an invalid row drops the pair. Comparisons against clean form
+one family per outcome, corrected by Benjamini--Hochberg \citep{benjamini1995fdr}.
 
 \section{Results}
 \label{sec:results}
-Table~\ref{tab:noise} reports outcome composition across perturbations. The clean
-baseline reaches F1 \NUM{baseF} with the gold document present in
-\NUM{baseGoldInCtx}\% of contexts; \NUM{baseParametric}\% of answerable items are
-answered correctly without the gold document present at all, i.e.\ from parametric
-memory rather than retrieval.
-
 \input{generated/tab1_noise}
 
-\paragraph{The manipulation works.}
-Correctness falls monotonically with corruption and every step is significant under
-a paired bootstrap on the same questions: $-3.3$, $-6.7$ and $-12.0$ points at
-25\%, 50\% and 75\% respectively ($p<0.0001$ at 75\%). Whatever else the
-perturbation does, it demonstrably degrades the evidence the generator receives.
+Table~\ref{tab:noise} gives outcome composition for the primary generator. The clean
+baseline reaches F1 \NUM{baseF}, with gold present in \NUM{baseGoldInCtx}\% of contexts.
 
-\paragraph{Hallucination is invariant.}
-Over the same range, the rate of unsupported assertion does not move. Paired
-differences against the clean condition are $-0.007$, $+0.000$ and $+0.000$, with
-$p=0.72$, $1.00$ and $1.00$ and intervals contained within $\pm0.027$. This is not
-a weak trend but a tight null measured against a 12-point collapse in accuracy.
+\paragraph{Hallucination does not rise.}
+Under related noise, correctness falls by $3.3$, $6.7$ and $12.0$ points at 25, 50 and
+75\% ($p<0.0001$ at 75\%), while unsupported assertion differs from clean by at most
+one item ($p \geq 0.72$; intervals within $\pm$\NUM{halluBoundPartial} points). Of 18
+correct answers lost at 75\%, 13 become abstentions, 5 grounded errors, and none
+fabrications. Across all nine conditions, eight are null after correction and the
+ninth is a significant \emph{decrease} under total random corruption, where the
+generator abstains almost always.
 
-Table~\ref{tab:noise} shows where the lost answers go. Of 18 correct answers lost
-between the clean and 75\% conditions, 13 become abstentions and 5 become answers
-that are wrong but faithful to the corrupted context. None become fabrications. The falsified-evidence rows show the contrast that
-motivates the paper: grounded error rises from \NUM{groundedClean}\% under clean
-retrieval to \NUM{groundedCF}\% at 50\% counterfactual corruption, while the
-unsupported column does not move. A
-pooled analysis reports that failures rose from 54 to 72 and stops there; the
-decomposition shows that the entire increase is absorbed by the two \emph{safe}
-failure modes.
+\paragraph{Falsified evidence is different.}
+At 50\% counterfactual corruption grounded error rises from \NUM{groundedClean}\% to
+\NUM{groundedCF}\%, roughly tenfold, and accuracy falls \NUM{deltaCorrectCF} points,
+while abstention does not significantly rise ($p = 0.06$). At total related corruption,
+by contrast, the generator abstains on \NUM{abstainAtTotal}\% of questions.
 
-\paragraph{Our preregistered hypothesis was not supported.}
-We predicted that silent failure --- the share of non-correct answers that are
-assertions rather than abstentions --- would peak at partial corruption, on the
-reasoning that a partly-plausible context licenses a confident guess where a wholly
-useless one triggers refusal. The observed series is $0.185$, $0.203$, $0.219$,
-$0.208$: an interior maximum, but with 95\% intervals of $[0.09, 0.30]$ and
-$[0.12, 0.33]$ that overlap completely. A power analysis conducted before data
-collection established that separating an interior peak at $n{=}150$ requires a
-gap exceeding 16 points; the observed spread is 3. We report the hypothesis as
-unsupported and underpowered rather than as a trend.
+\paragraph{The result replicates across model families.}
+\input{generated/tab3_crossmodel}
+We reran the grid on \NUM{genModelTwo}, with the same questions, retrieval and
+perturbations (Table~\ref{tab:xmodel}). Hallucination rises in \NUM{halluUpTwo} of
+\NUM{nCondTwo} conditions (\NUM{halluNullTwo} null, \NUM{halluDownTwo} significant
+decreases; no interval above \(\NUM{halluMaxUpperTwo}\) points). Falsified evidence
+again cuts accuracy (\(\NUM{cfDeltaCorrectTwo}\) points, \(q \NUM{cfQCorrectTwo}\)) and
+raises grounded error from \NUM{groundedCleanTwo}\% to \NUM{groundedCFTwo}\%
+(\(\NUM{cfDeltaGroundedTwo}\), \(q \NUM{cfQGroundedTwo}\)), while abstention
+is unchanged (\(\NUM{cfDeltaAbstainTwo}\), \(q \NUM{cfQAbstainTwo}\)).
 
-The construct itself proved less informative than its components. Because
-\textsc{silent\_failure} pools unsupported assertions (flat) with grounded errors
-(rising), the ratio is insensitive to the very decomposition that carries the
-result. We recommend reporting the outcome counts directly.
+\NUM{nInvalidRowsTwo} of this generator's generations (\NUM{invalidPctTwo}\%) are
+invalid, mostly because some prompts send it into a reasoning loop that outlasts any
+timeout; \NUM{nLoopingTwo} questions fail in five or more conditions. Loss is not
+random: on the fully observed primary run the \NUM{nExcludedTwo} affected questions had
+a clean unsupported rate of \NUM{refUnsupExcluded}\% against \NUM{refUnsupComplete}\%
+for the rest. Restricting to the \NUM{nCompleteTwo} questions valid in all ten
+conditions leaves the comparisons intact: grounded error \(\NUM{ccDeltaGroundedTwo}\),
+accuracy \(\NUM{ccDeltaCorrectTwo}\), abstention \(\NUM{ccDeltaAbstainTwo}\) points,
+and hallucination up in \NUM{ccHalluUpTwo} conditions (no interval above
+\(\NUM{ccHalluUpperTwo}\)).
 
-\paragraph{Predicting failure before generation.}
-Table~\ref{tab:predict} gives the AUROC of each retrieval-side signal against two
-targets: any non-correct answer, and the narrower case of an unsupported assertion.
-The strongest predictor of an unsupported assertion is \NUM{bestSilentSignal} at
-AUROC \NUM{bestSilentAUROC}.
+\paragraph{The headline does not depend on the judge.}
+A judge from a different family (\NUM{judgeB}) re-scored \NUM{judgeAgreementN} judged
+answers whose context was stored. Raw agreement is \NUM{judgeRawAgree}\%, but Cohen's
+\(\kappa\) is \NUM{judgeKappa}: of \NUM{judgeAUnsupN} answers the primary judge called
+unsupported, the second agreed on \NUM{judgeAUnsupAgree}, and all five appear verbatim
+in the context, suggesting the primary judge over-calls this label. We therefore do
+not rely on it. Counting only rule-derived hallucinations, the rate rises in
+\NUM{ruleOnlyUp} of nine conditions for the primary generator and \NUM{ruleOnlyUpTwo}
+for the second. Treating judge-assigned \textsc{unsupported} labels as grounded error
+leaves the falsified-evidence effect at \(\NUM{reclassGroundedCF}\) and
+\(\NUM{reclassGroundedCFTwo}\) points.
 
-The practical question is not the AUROC but whether a similarity threshold is worth
-deploying, and that depends on how much worse a fabrication is than a refusal --- a
-property of the application, not of the model. We therefore sweep that cost ratio
-and report the break-even point: the factor by which a hallucination must outweigh a
-correct answer before any threshold beats answering everything. Below an AUROC of
-roughly 0.6 no threshold is viable at any cost ratio, and a system that needs to
-suppress unsupported assertions must verify after generation rather than gate before
-it. That is a useful result for practitioners either way, because the cheap gate is
-the first thing most deployments reach for.
+\paragraph{Silent failure: preregistered prediction not supported.}
+We predicted that the share of non-correct answers that are assertions would peak at
+partial corruption. The primary series ($0.185$, $0.203$, $0.219$, $0.208$) has an
+interior maximum, but its intervals overlap completely, and the second generator's
+series declines from 25\% corruption onward. We report the hypothesis as unsupported.
+
+\paragraph{Retrieval signals and synthetic validity.}
+The strongest retrieval-side predictor of an unsupported assertion, \NUM{bestSilentSignal},
+reaches AUROC \NUM{bestSilentAUROC} (Table~\ref{tab:predict}). The \NUM{manipNNatural}
+clean-condition items whose gold document was naturally absent behave like
+synthetically evidence-free items (abstention \NUM{manipAbstainNatural} and
+\NUM{manipAbstainSynthetic}); intervals overlap on every outcome, which is evidence
+against a large discrepancy, not of equivalence.
 
 \input{generated/tab2_predictability}
 
-\paragraph{Does the synthetic perturbation reproduce real failure?}
-The study's independent variable is artificial, so the results are only as good as
-the manipulation's correspondence to retrieval that fails on its own. The clean
-condition supplies the control: \NUM{manipNNatural} items whose gold document was simply absent from
-the top-$K$, with no intervention. Comparing those against synthetically
-evidence-free items, the 95\% intervals overlap on every outcome --- correct,
-abstain, unsupported and grounded error alike. In both cases the generator
-overwhelmingly abstains (\NUM{manipAbstainNatural} natural,
-\NUM{manipAbstainSynthetic} synthetic) and rarely asserts anything unsupported
-(\NUM{manipUnsupNatural} and \NUM{manipUnsupSynthetic}).
-
-We state this as the weak result it is: overlap at these sample sizes is evidence
-against a large discrepancy, not evidence of equivalence. But it is the check a
-reader is entitled to demand, and it costs nothing beyond data already collected.
-
-\paragraph{Is the result an artefact of the judge?}
-A second judge from a different model family (\NUM{judgeB}) re-scored the
-\NUM{judgeAgreementN} judged answers whose context was stored. Raw agreement is
-\NUM{judgeRawAgree}\%, but that reflects the majority label and Cohen's
-\(\kappa\) is \NUM{judgeKappa}: of the \NUM{judgeAUnsupN} answers the primary judge
-called unsupported, the second agreed on \NUM{judgeAUnsupAgree}. In all five the
-answer appears verbatim in the retrieved text, which suggests the primary judge
-over-calls this label. We therefore do not rely on judge-assigned
-\textsc{unsupported} labels. Counting only rule-derived hallucinations, the rate rises
-in \NUM{ruleOnlyUp} of nine conditions (\NUM{ruleOnlyNull} null,
-\NUM{ruleOnlyDown} significant decreases; no interval extends above
-\(\NUM{ruleOnlyUpper}\) points). Reclassifying judge-assigned \textsc{unsupported}
-labels as grounded error leaves the falsified-evidence effect intact
-(\(\NUM{reclassGroundedCF}\) points at 50\% counterfactual corruption).
-Neither headline depends on the judge.
-
-\paragraph{Inference-time defences do not address the failure they are aimed at.}
-The standard remedy for RAG error is to instruct the model to answer only from
-retrieved text and to refuse otherwise. Evaluated under counterfactual corruption
---- the condition Section~\ref{sec:results} identifies as dangerous --- that
-instruction fails in a specific and instructive way.
-
-Strict prompting reduces unsupported assertion from \NUM{mitNUnsupNone} items to
-\NUM{mitNUnsupStrict} (\(\NUM{mitDeltaHallu}\), \(p \NUM{mitPHallu}\)). It does so
-by refusing far more often (\(\NUM{mitDeltaAbstain}\), \(p \NUM{mitPAbstain}\)), and
-the refusals are not targeted: correct answers change by \(\NUM{mitDeltaCorrect}\)
-(\(p \NUM{mitPCorrect}\)), \NUM{mitNCorrectNone} items to \NUM{mitNCorrectStrict}.
-The exchange is \NUM{mitCorrectPerFabrication} correct answers surrendered per
-fabrication prevented.
-
-Grounded error --- the outcome that actually rises under corrupted evidence, and
-the reason this condition is dangerous --- does not fall at all
-(\(\NUM{mitDeltaGrounded}\), \(p \NUM{mitPGrounded}\)). The defence suppresses the failure mode that was
-never elevated and leaves untouched the one that was.
-
-This is what the taxonomy predicts. An abstention instruction can only act on a
-signal of uncertainty, and a false-but-coherent passage presents none: it is
-fluent, on-topic, and directly answers the question. The model cannot refuse
-selectively because it cannot tell which contexts are lying, so it refuses
-indiscriminately and pays for it in accuracy. Defences built to suppress
-fabrication are aimed at a different failure than the one corrupted retrieval
-produces.
-
-\begin{figure}[t]\centering
-  \includegraphics[width=\linewidth]{fig4_mitigation_tradeoff_squad.png}
-  \caption{Mitigations trade accuracy for safety. Points below the dotted
-  break-even line discard at least as much correct output as hallucination.}
-  \label{fig:mitigation}
-\end{figure}
+\paragraph{Strict prompting misses the failure.}
+Under counterfactual corruption, an instruction to answer only from the context and
+otherwise refuse changes unsupported assertion by \(\NUM{mitDeltaHallu}\)
+(\(p \NUM{mitPHallu}\)), abstention by \(\NUM{mitDeltaAbstain}\)
+(\(p \NUM{mitPAbstain}\)), and correct answers by \(\NUM{mitDeltaCorrect}\)
+(\(p \NUM{mitPCorrect}\)). Grounded error does not fall
+(\(\NUM{mitDeltaGrounded}\), \(p \NUM{mitPGrounded}\)). A false but coherent passage
+presents no signal of uncertainty to act on, so refusals are untargeted.
 
 \section{Conclusion}
-Across a range of retrieval corruption that costs \NUM{deltaCorrectPartial} points
-of accuracy, the system studied here did not fabricate more; it refused more, and it
-faithfully repeated more of the wrong evidence it was given. Only when the evidence
-was removed outright did it recognise the problem, abstaining on
-\NUM{abstainAtTotal}\% of questions --- which locates the practical risk not in
-fabrication under degraded retrieval but in the generator's inability to tell
-degraded evidence from good. Whether that reflects retrieval-augmented generation in
-general or one instruction-tuned model's disposition toward abstention is the
-obvious next question, and this design answers it by swapping a single argument.
+Across two model families, corrupting retrieval did not produce more fabrication. Absent
+evidence produced refusal; falsified evidence produced faithful repetition without
+refusal. Faithfulness is not truthfulness, and the risk lies in corrupted knowledge
+bases rather than hallucination. Defences need to verify evidence, since
+uncertainty-based abstention does not fire.
 
 \section*{Limitations}
 % Required at *ACL venues. Reviewers reward candour here; the facts are
 % discoverable either way.
-Judges and generator are different checkpoints but come from one model family,
-and two judge checkpoints were used across phases (\S\ref{sec:method}); a shared
-family can share blind spots. Judge labels have not been validated against human annotation, and an independent
-model judge did not reproduce the primary judge's \textsc{unsupported} labels
-(Section~\ref{sec:results}); the headline conclusions are therefore stated so as to
-hold under rule-derived labels alone. All findings concern a single generator
-and do not establish cross-model generality. Abstention is
-detected by a lexical rule whose precision and recall are measured on a
-hand-labelled subset but which will misclassify unusual phrasings. The corpus is
-roughly 1.3k chunks --- small enough that claims should not be extrapolated to
-production-scale knowledge bases. Conditions are run once at temperature 0, which this API does not
-make fully deterministic: an independent re-run of the 50\% counterfactual condition
-in the mitigation phase gave \NUM{mitCorrectNonePct}\% correct against
-\NUM{correctCF}\% for the same condition in Table~\ref{tab:noise}, a difference
-well inside either interval. One sample per condition is not an estimate of sampling variance.
-Finally, the perturbations are synthetic by construction: they isolate failure
-modes cleanly at the cost of not being drawn from any observed deployment
-distribution.
+Two generators are not a population: both are instruction-tuned models served through
+one provider, and the result may not extend to others. The primary judge shares a
+family with the primary generator, and two judge checkpoints were used. Judge labels
+have not been validated against human annotation, and an independent model judge did
+not reproduce the primary judge's \textsc{unsupported} labels; the headline
+conclusions are stated so as to hold under rule-derived labels alone. The second
+generator lost \NUM{invalidPctTwo}\% of generations non-randomly; the complete-case
+analysis addresses differential loss between conditions but not selection on which
+questions are observed, so its absolute rates describe easier questions. Abstention
+is detected by a lexical rule that will misclassify unusual phrasings. The corpus is
+roughly 1.3k chunks and should not be extrapolated to production scale. Conditions
+are run once at temperature 0, which this API does not make fully deterministic: an
+independent re-run of the 50\% counterfactual condition gave
+\NUM{mitCorrectNonePct}\% correct against \NUM{correctCF}\% in Table~\ref{tab:noise}.
+Perturbations are synthetic and isolate failure modes at the cost of not being drawn
+from any observed deployment distribution.
 
 \section*{Ethics Statement}
 This work uses public QA benchmarks and involves no human subjects and no personal

@@ -17,13 +17,15 @@ Accepted papers may add one page.
 
 ## 1. Build the PDF (Overleaf, ~10 minutes)
 
-1. Download `overleaf_upload.zip` from the repo root (it contains `main.tex`,
-   `refs.bib`, `generated/`, the figure, and the official ACL style files).
+1. Run `python paper/make_overleaf_zip.py` to write `overleaf_upload.zip` at the repo
+   root (gitignored; it contains `main.tex`, `refs.bib`, `generated/` and the official
+   ACL style files).
 2. overleaf.com → **New Project → Upload Project** → choose the zip.
 3. Menu → Compiler: **pdfLaTeX** → **Recompile**.
 4. Check the page count. Content (everything before References) must fit in
    **4 pages**. Limitations, Ethics and References come after and do not count
-   toward the 4 pages under ACL rules. If it runs over, trim Section 5 first.
+   toward the 4 pages under ACL rules. The draft is estimated at under 4 pages from a mock layout, not from a real LaTeX
+   build, so this check matters. If it runs over, trim Section 5 first.
 
 The template is in **review** mode (`\usepackage[review]{acl}`), which hides the
 author block and adds line numbers, as the submission requires. For arXiv and the

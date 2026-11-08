@@ -84,6 +84,55 @@ def analyse(data):
     }
 
 
+def missingness(data, reference):
+    """How much do questions the generator never finished matter? (0 API calls)
+
+    Some questions send a reasoning model into a loop that outlasts any timeout, so
+    their rows are INVALID. Re-run the headline comparisons on the questions valid in
+    all ten conditions, so differential loss between conditions cannot produce them,
+    and compare excluded and retained questions on the fully observed reference run.
+    """
+    rows = data["rows"]
+    all_q = {r["qid"] for r in rows["clean"]}
+    bad = {r["qid"] for v in rows.values() for r in v if r["outcome"] == "INVALID"}
+    keep = all_q - bad
+    sub = {n: [r for r in v if r["qid"] in keep] for n, v in rows.items()}
+    names = [n for n in sub if n != "clean"]
+
+    def family(fn):
+        return apply_fdr({n: paired_diff_by_qid(sub["clean"], sub[n], fn) for n in names})
+
+    hallu = family(is_unsupported)
+    outcomes = {"correct": "CORRECT", "abstain": "ABSTAIN", "grounded": "INCORRECT_GROUNDED",
+                "unsupported": "UNSUPPORTED"}
+    cf = {k: family(lambda r, o=o: r["outcome"] == o)["counterfactual@50"]
+          for k, o in outcomes.items()}
+
+    def rate(rows_, qids, outcome):
+        hit = [r for r in rows_ if r["qid"] in qids]
+        return round(100 * sum(r["outcome"] == outcome for r in hit) / len(hit), 1)
+
+    def unans(qids):
+        hit = [r for r in rows["clean"] if r["qid"] in qids]
+        return round(100 * sum(not r.get("is_answerable", True) for r in hit) / len(hit), 1)
+
+    ref = reference["rows"]["clean"]
+    per_q = [sum(r["outcome"] == "INVALID" and r["qid"] == q for v in rows.values() for r in v)
+             for q in all_q]
+    return {
+        "n_questions": len(all_q), "n_complete": len(keep), "n_excluded": len(bad),
+        "n_excluded_5plus": sum(c >= 5 for c in per_q),
+        "unanswerable_pct": {"excluded": unans(bad), "complete": unans(keep)},
+        "reference_clean": {o.lower(): {"excluded": rate(ref, bad, o), "complete": rate(ref, keep, o)}
+                            for o in outcomes.values()},
+        "hallucination": {
+            "up": [n for n in names if hallu[n].get("significant_fdr") and hallu[n]["diff"] > 0],
+            "down": [n for n in names if hallu[n].get("significant_fdr") and hallu[n]["diff"] < 0],
+            "max_upper_pts": round(100 * max(hallu[n]["hi"] for n in names), 1)},
+        "counterfactual@50": cf,
+    }
+
+
 def main():
     out = {"note": ("Sensitivity of the headline comparisons to judge-assigned labels. "
                     "No API calls; recomputed from per-item rows.")}
@@ -101,6 +150,13 @@ def main():
         cf = s["reclassified_grounded"]["counterfactual@50"]
         print(f"  grounded+judged at counterfactual@50: diff {cf['diff']:+.3f} "
               f"[{cf['lo']:+.3f}, {cf['hi']:+.3f}] q={cf.get('q_value')}")
+    if "gemma" in out:
+        with open(os.path.join(config.RESULTS_DIR, RUNS["gemma"]), encoding="utf-8") as f:
+            gemma = json.load(f)
+        with open(os.path.join(config.RESULTS_DIR, RUNS["primary"]), encoding="utf-8") as f:
+            primary = json.load(f)
+        out["gemma"]["missingness"] = missingness(gemma, primary)
+        print("\nmissingness:", json.dumps(out["gemma"]["missingness"], default=str)[:1800])
     target = os.path.join(config.RESULTS_DIR, "phase7_judge_sensitivity_squad.json")
     with open(target, "w", encoding="utf-8") as f:
         json.dump(out, f, indent=2)

@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <b>Status: experiments complete (n = 150, 950 scored generations) · short paper in preparation</b>
+  <b>Status: experiments complete (n = 150; 2,838 scored generations across two model families) · short paper in preparation</b>
 </p>
 
 ---
@@ -51,12 +51,24 @@ conditions. Full numbers with 95% bootstrap intervals: Table 1 in
 | **falsified, 50%** | **42.0%** | **32.7%** | **4.7%** | **20.7%** |
 
 - **Hallucination never rises.** Eight of nine paired comparisons against clean are
-  null after Benjamini–Hochberg correction (within ±2.7 points); the ninth is a
-  significant *decrease*.
+  null after Benjamini–Hochberg correction and no 95% interval extends above +3.4
+  points; the ninth is a significant *decrease*.
 - **Falsified evidence is the dangerous case.** Accuracy falls 22 points, abstention
   does not significantly rise (p = 0.06), and wrong-but-faithful answers rise about
   tenfold (+18.7 points, p < 0.0001). The model can tell *no* evidence from *some*
   evidence, but not true evidence from false.
+- **It replicates across model families.** On open-weights `gemma-4-26b-a4b-it`,
+  hallucination rises in 0 of 9 conditions (no interval above +2.5 points), and 50%
+  falsified evidence costs 19.5 points of accuracy, raises wrong-but-faithful answers
+  by 18.7 points (3.1% to 22.0%) and leaves abstention unchanged (q = 0.846). 162 of
+  Gemma's 1,500 generations (10.8%) are invalid, mostly reasoning loops that outlast
+  any timeout; restricting to the 104 questions valid in all ten conditions gives the
+  same picture (+18.3 grounded, −19.2 accuracy).
+- **It does not depend on the LLM judge.** An independent judge did not reproduce the
+  primary judge's UNSUPPORTED labels (0 of 5; κ = −0.02), so the paper does not rely on
+  them: counting only rule-derived hallucinations, the rate rises in 0 of 9 conditions
+  for both generators, and reclassifying judged labels leaves the falsified-evidence
+  effect at +18.0 and +18.7 points.
 - **"Answer only from the context" does not fix it.** Strict prompting cuts
   hallucination from 8 items to 3 but gives up 27 correct answers to do so, and
   leaves wrong-but-faithful answers unchanged (p = 0.245).
@@ -211,7 +223,7 @@ python annotate.py score  --task abstention      # precision/recall of the abste
 
 This is the cheapest credibility the project can buy, and it is the one thing the
 code cannot do for you. The judges are different checkpoints from the generator, but
-until κ is reported the judged labels are unvalidated (79% of the headline metric is
+until κ is reported the judged labels are unvalidated (76% of the headline metric is
 rule-derived and does not depend on them).
 
 ### Build the paper
