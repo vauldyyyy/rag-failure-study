@@ -221,6 +221,11 @@ def main():
     p.add_argument("--judge-b", default="models/gemini-flash-lite-latest",
                    help="Second judge; must differ from the primary judge")
     p.add_argument("--limit", type=int, default=120)
+    p.add_argument("--agreement-only", action="store_true",
+                   help="Keep the existing dependence block and replace only the "
+                        "agreement block. The dependence numbers are reported in the "
+                        "paper for the primary run; recomputing them over every "
+                        "results file (cross-model runs included) would change them.")
     args = p.parse_args()
 
     rows = load_rows(args.dataset)
@@ -228,8 +233,14 @@ def main():
         sys.exit(f"No results for '{args.dataset}'.")
 
     print(f"{len(rows)} scored rows\n")
+    dependence = None
+    if args.agreement_only:
+        existing = os.path.join(config.RESULTS_DIR,
+                                f"phase6_judge_agreement_{args.dataset}.json")
+        with open(existing, "r", encoding="utf-8") as f:
+            dependence = json.load(f).get("dependence")
     report = {
-        "dependence": dependence_report(rows),
+        "dependence": dependence if dependence is not None else dependence_report(rows),
         "agreement": agreement_report(rows, args.judge_b, args.limit),
         "note": ("Inter-judge agreement bounds label reliability from one side only: "
                  "two LLM judges can share a bias no human would. Disagreement is "

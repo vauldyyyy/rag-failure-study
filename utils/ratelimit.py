@@ -81,6 +81,26 @@ def is_quota_error(e) -> bool:
             or "exceeded your current quota" in msg or "rate limit" in msg)
 
 
+def is_transient_server_error(e) -> bool:
+    """500 INTERNAL / 503 UNAVAILABLE ("high demand") / 504: the server failed,
+    not the request and not our quota. Retry soon and often. These used to fall
+    through to the generic branch, exhaust five short retries, and the item was
+    dropped as INVALID, silently shrinking n on a busy model (gemma-4 in Nov 2026).
+    They must not trigger the quota path either: that marks the whole minute as
+    spent and sleeps 1-3 minutes per hiccup."""
+    msg = str(e).lower()
+    return (msg.startswith(("500", "502", "503", "504")) or "internal error" in msg
+            or "unavailable" in msg or "high demand" in msg or "overloaded" in msg
+            or "deadline exceeded" in msg or "timed out" in msg)
+
+
+TRANSIENT_RETRIES = 10
+
+
+def transient_sleep(attempt: int) -> float:
+    return min(30.0, 3.0 * (attempt + 1))
+
+
 def is_daily_quota_error(e) -> bool:
     """A per-day cap will not clear by waiting a minute; the run must stop."""
     msg = str(e).lower()

@@ -28,6 +28,8 @@
 \usepackage{microtype}
 \usepackage{booktabs}
 \usepackage{graphicx}
+% Figures resolve from the repo layout (../results/) and from a flat Overleaf upload (./).
+\graphicspath{{../results/}{./}}
 \usepackage{amsmath}
 \usepackage{xcolor}
 
@@ -397,7 +399,7 @@ fabrication are aimed at a different failure than the one corrupted retrieval
 produces.
 
 \begin{figure}[t]\centering
-  \includegraphics[width=\linewidth]{../results/fig4_mitigation_tradeoff_squad.png}
+  \includegraphics[width=\linewidth]{fig4_mitigation_tradeoff_squad.png}
   \caption{Mitigations trade accuracy for safety. Points below the dotted
   break-even line discard at least as much correct output as hallucination.}
   \label{fig:mitigation}

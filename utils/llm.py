@@ -3,11 +3,13 @@ import sys
 import time
 
 import google.generativeai as genai
+import requests
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
-from utils.ratelimit import (DailyQuotaExhausted, RateLimiter, is_daily_quota_error,
-                             is_quota_error, quota_sleep)
+from utils.ratelimit import (DailyQuotaExhausted, RateLimiter, TRANSIENT_RETRIES,
+                             is_daily_quota_error, is_quota_error,
+                             is_transient_server_error, quota_sleep, transient_sleep)
 
 genai.configure(api_key=config.GEMINI_API_KEY)
 
@@ -66,6 +68,48 @@ def supports_system_instruction(model_name: str) -> bool:
     return "gemma" not in model_name.lower()
 
 
+_REST_URL = "https://generativelanguage.googleapis.com/v1beta/{model}:generateContent"
+
+
+def _rest_generate(model_name: str, user_prompt: str, temperature: float):
+    """Direct REST call, used for Gemma.
+
+    Gemma 4 returns its reasoning as separate parts marked "thought": true. The
+    pinned google-generativeai SDK drops that flag, so response.text glues the
+    reasoning onto the answer and every Gemma answer would be scored on a page of
+    chain-of-thought instead of a span. Here thought parts are discarded and only
+    the answer parts are kept. Errors are raised with the HTTP status and Google's
+    status string in the message so the existing quota/fatal classifiers apply.
+    """
+    name = model_name if model_name.startswith("models/") else f"models/{model_name}"
+    r = requests.post(
+        _REST_URL.format(model=name),
+        headers={"x-goog-api-key": config.GEMINI_API_KEY,
+                 "Content-Type": "application/json"},
+        json={"contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
+              "generationConfig": {"temperature": temperature}},
+        timeout=120,
+    )
+    if r.status_code != 200:
+        try:
+            err = r.json().get("error", {})
+        except ValueError:
+            err = {}
+        raise RuntimeError(f"{r.status_code} {err.get('status', '')} "
+                           f"{err.get('message', r.text[:200])}")
+    data = r.json()
+    cands = data.get("candidates") or []
+    if not cands:
+        reason = (data.get("promptFeedback") or {}).get("blockReason")
+        return {"text": "", "status": "blocked", "detail": str(reason)}
+    parts = (cands[0].get("content") or {}).get("parts") or []
+    answer = "".join(p.get("text", "") for p in parts if not p.get("thought"))
+    if not answer.strip():
+        return {"text": "", "status": "blocked",
+                "detail": str(cands[0].get("finishReason"))}
+    return {"text": answer, "status": "ok"}
+
+
 def _get_model(model_name: str, system_prompt: str):
     native = supports_system_instruction(model_name)
     key = (model_name, system_prompt if native else None)
@@ -111,10 +155,15 @@ def generate_answer(query: str, retrieved_contexts: list,
     if not supports_system_instruction(model_name):
         user_prompt = f"{system_prompt}\n\n{user_prompt}"
 
-    for attempt in range(max_retries):
+    transient = 0
+    attempt = 0
+    while attempt < max_retries:
+        attempt += 1
         try:
             limiter.acquire(1)
             note_call()
+            if not supports_system_instruction(model_name):
+                return _rest_generate(model_name, user_prompt, temperature)
             response = model.generate_content(
                 user_prompt,
                 generation_config=genai.types.GenerationConfig(temperature=temperature),
@@ -132,15 +181,25 @@ def generate_answer(query: str, retrieved_contexts: list,
             # let the caller checkpoint rather than burn attempts.
             if is_daily_quota_error(e):
                 raise DailyQuotaExhausted(f"Daily generation quota exhausted: {e}") from e
+            if is_transient_server_error(e) and transient < TRANSIENT_RETRIES:
+                # Server hiccup: does not consume one of the ordinary attempts.
+                transient += 1
+                attempt -= 1
+                print(f"    [gen] transient {str(e)[:40]!r}, retry {transient}/{TRANSIENT_RETRIES}",
+                      file=sys.stderr, flush=True)
+                time.sleep(transient_sleep(transient))
+                continue
             if is_quota_error(e):
                 limiter.note_rejection()
-                if attempt == max_retries - 1:
+                if attempt == max_retries:
                     return {"text": "", "status": "error", "detail": f"quota: {e}"}
-                time.sleep(quota_sleep(attempt))
+                print(f"    [gen] quota {str(e)[:40]!r}", file=sys.stderr, flush=True)
+                time.sleep(quota_sleep(attempt - 1))
                 continue
             if is_fatal_error(e):
                 raise RuntimeError(f"Unrecoverable Gemini error (not retrying): {e}") from e
-            if attempt == max_retries - 1:
+            if attempt == max_retries:
                 print(f"LLM Error: {e}")
                 return {"text": "", "status": "error", "detail": str(e)}
-            time.sleep(min(60, (2 ** attempt) * 4))
+            time.sleep(min(60, (2 ** (attempt - 1)) * 4))
+    return {"text": "", "status": "error", "detail": "retries exhausted"}

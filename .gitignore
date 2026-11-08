@@ -53,3 +53,4 @@ run.log
 
 # Intermediate per-condition checkpoints; final results/*.json supersede them
 results/checkpoints/
+overleaf_upload.zip

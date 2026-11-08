@@ -139,9 +139,12 @@ def check_citations(tex):
 
 
 def check_figures(tex):
+    # Resolve like LaTeX: the paper directory first, then each \graphicspath entry.
+    m = re.search(r"\\graphicspath\{((?:\{[^}]*\})+)\}", tex)
+    search = [""] + (re.findall(r"\{([^}]*)\}", m.group(1)) if m else [])
     for path in re.findall(r"\\includegraphics(?:\[[^\]]*\])?\{([^}]*)\}", tex):
-        resolved = os.path.normpath(os.path.join(PAPER_DIR, path))
-        if not os.path.exists(resolved):
+        candidates = [os.path.normpath(os.path.join(PAPER_DIR, d, path)) for d in search]
+        if not any(os.path.exists(c) for c in candidates):
             fail("figures", f"referenced figure missing: {path} "
                             f"(run visualize_results.py)")
 

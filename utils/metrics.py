@@ -235,7 +235,11 @@ def judge_faithfulness(question: str, contexts: list, prediction: str, max_retri
         context=context_text, question=question, answer=prediction
     )
 
-    for attempt in range(max_retries):
+    from utils.ratelimit import TRANSIENT_RETRIES, is_transient_server_error, transient_sleep
+    transient = 0
+    attempt = -1
+    while attempt < max_retries - 1:
+        attempt += 1
         try:
             llm_limiter.acquire(1)
             note_call()
@@ -249,6 +253,11 @@ def judge_faithfulness(question: str, contexts: list, prediction: str, max_retri
         except Exception as e:
             if is_daily_quota_error(e):
                 raise DailyQuotaExhausted(f"Daily quota exhausted during judging: {e}") from e
+            if is_transient_server_error(e) and transient < TRANSIENT_RETRIES:
+                transient += 1
+                attempt -= 1
+                time.sleep(transient_sleep(transient))
+                continue
             if is_quota_error(e):
                 llm_limiter.note_rejection()
                 if attempt == max_retries - 1:
@@ -261,6 +270,7 @@ def judge_faithfulness(question: str, contexts: list, prediction: str, max_retri
                 print(f"Judge error: {e}")
                 return "JUDGE_ERROR"
             time.sleep(min(60, (2 ** attempt) * 4))
+    return "JUDGE_ERROR"
 
 
 # --------------------------------------------------------------------------- #
