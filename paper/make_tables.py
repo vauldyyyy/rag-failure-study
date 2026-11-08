@@ -155,6 +155,39 @@ def pct_ci(c):
     return f"{100 * c['mean']:.1f}"
 
 
+def sensitivity_macros(sens):
+    """Label dependence and judge-free versions of the headline, per generator."""
+    out = []
+    if not sens:
+        return out
+
+    def m(name, value):
+        return f"\\newcommand{{\\{name}}}{{{value}}}"
+
+    for key, suffix in (("primary", ""), ("gemma", "Two")):
+        run = sens.get(key)
+        if not run:
+            continue
+        dep = run["dependence"]
+        out += [
+            m(f"nScoredRows{suffix}", f"{dep['n_valid']:,}"),
+            m(f"nInvalidRows{suffix}", dep["n_invalid"]),
+            m(f"judgeInvocationPct{suffix}", f"{dep['judge_invocation_pct']:.1f}"),
+            m(f"nUnsupported{suffix}", dep["n_unsupported"]),
+            m(f"nUnsupportedRule{suffix}", dep["n_unsupported_rule"]),
+            m(f"nUnsupportedJudged{suffix}", dep["n_unsupported_judged"]),
+            m(f"ruleDerivedPct{suffix}", f"{dep['rule_derived_pct']:.0f}"),
+        ]
+        ro = run["rule_only_hallucination"]["summary"]
+        out.append(m(f"ruleOnlyUpper{suffix}", f"{ro['max_upper_pts']:+.1f}"))
+        out += [m(f"ruleOnlyUp{suffix}", len(ro["up"])), m(f"ruleOnlyDown{suffix}", len(ro["down"])),
+                m(f"ruleOnlyNull{suffix}", ro["n_null"]),
+                m(f"ruleOnlyBound{suffix}", f"{ro['null_bound_pts']:.1f}")]
+        cf = run["reclassified_grounded"]["counterfactual@50"]
+        out.append(m(f"reclassGroundedCF{suffix}", f"{100 * cf['diff']:+.1f}"))
+    return out
+
+
 def crossmodel_macros(second):
     """Headline numbers for the replication, with a Two suffix."""
     out = []
@@ -177,6 +210,11 @@ def crossmodel_macros(second):
             else: down += 1
         else:
             bound = max(bound, abs(h.get("lo", 0)), abs(h.get("hi", 0)))
+    uppers = [((conds[n].get("vs_clean") or {}).get("hallucination_rate") or {}).get("hi")
+              for n in comps]
+    uppers = [u for u in uppers if u is not None]
+    if uppers:
+        out.append(m("halluMaxUpperTwo", f"{100 * max(uppers):+.1f}"))
     out += [m("halluUpTwo", up), m("halluDownTwo", down),
             m("halluNullTwo", len(comps) - up - down),
             m("halluBoundTwo", f"{100 * bound:.1f}")]
@@ -339,6 +377,13 @@ def macros(baseline, noise, predict, manifest, synthetic, judge=None,
 
 
     if noise:
+        # The claim is that hallucination does not rise, so the bound that matters
+        # is the largest upper CI limit across every condition, not one condition's.
+        uppers = [(v.get("vs_clean") or {}).get("hallucination_rate", {}).get("hi")
+                  for k, v in noise["conditions"].items() if k != "clean"]
+        uppers = [u for u in uppers if u is not None]
+        if uppers:
+            out.append(m("halluMaxUpper", f"{100 * max(uppers):+.1f}"))
         g = grounded_ci(noise, "clean")
         if g:
             out.append(m("groundedClean", f"{100 * g['mean']:.1f}"))
@@ -387,16 +432,8 @@ def macros(baseline, noise, predict, manifest, synthetic, judge=None,
             ]
 
     if judge:
-        dep = judge.get("dependence") or {}
-        if dep.get("n_valid"):
-            out.append(m("nScoredRows", f"{dep['n_valid']:,}"))
-            out.append(m("judgeInvocationPct", f"{100 * dep['judge_invocation_rate']:.1f}"))
-            out.append(m("nUnsupported", dep.get("n_unsupported", "??")))
-            out.append(m("nUnsupportedRule", dep.get("n_unsupported_rule", "??")))
-            out.append(m("nUnsupportedJudged", dep.get("n_unsupported_judged", "??")))
-            share = dep.get("judge_derived_share_of_headline")
-            if share is not None:
-                out.append(m("ruleDerivedPct", f"{100 * (1 - share):.0f}"))
+        # Label dependence comes from phase 7, computed over the complete grid; the
+        # phase 6 block predates the finished grid and undercounts it.
         agree = judge.get("agreement") or {}
         if agree.get("n"):
             out.append(m("judgeAgreementN", agree["n"]))
@@ -435,6 +472,7 @@ def main():
     predict = load(f"phase3_predictability_{args.dataset}.json")
     mitig = load(f"phase4_fixes_{args.dataset}.json")
     manip = load(f"phase5_manipulation_check_{args.dataset}.json")
+    sens = load(f"phase7_judge_sensitivity_{args.dataset}.json")
     second = load(f"phase2b_noise_{args.dataset}_gemma.json")
     if second and not second.get("manifest", {}).get("grid_complete"):
         print("  cross-model results incomplete; skipping Table 3")
@@ -457,7 +495,8 @@ def main():
         ("tab2_predictability.tex", table_predictability(predict)),
         ("tab3_crossmodel.tex", table_crossmodel(noise, second)),
         ("macros.tex", "\n".join([macros(baseline, noise, predict, manifest, synthetic,
-                                          judge, mitig, manip)] + crossmodel_macros(second))),
+                                          judge, mitig, manip)] + crossmodel_macros(second)
+                                         + sensitivity_macros(sens))),
     ):
         if content is None:
             print(f"  skip {filename} (source results missing)")

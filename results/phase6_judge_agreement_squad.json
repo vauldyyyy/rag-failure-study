@@ -8,6 +8,65 @@
     "n_unsupported_judged": 8,
     "judge_derived_share_of_headline": 0.2051
   },
-  "agreement": null,
+  "agreement": {
+    "judge_a": "models/gemini-3.1-flash-lite",
+    "judge_b": "models/gemma-4-31b-it",
+    "n": 83,
+    "raw_agreement": 0.9277,
+    "cohens_kappa": -0.0205,
+    "confusion": {
+      "SUPPORTED": {
+        "SUPPORTED": 77,
+        "UNSUPPORTED": 1
+      },
+      "UNSUPPORTED": {
+        "SUPPORTED": 5
+      }
+    },
+    "disagreements": [
+      {
+        "qid": "572a0b101d046914007796e9",
+        "condition": "drop_gold@100",
+        "judge_a": "UNSUPPORTED",
+        "judge_b": "SUPPORTED",
+        "prediction": "2010"
+      },
+      {
+        "qid": "572648ed5951b619008f6f06",
+        "condition": "drop_gold@100",
+        "judge_a": "UNSUPPORTED",
+        "judge_b": "SUPPORTED",
+        "prediction": "Antioch"
+      },
+      {
+        "qid": "57111428b654c5140001fb00",
+        "condition": "none",
+        "judge_a": "UNSUPPORTED",
+        "judge_b": "SUPPORTED",
+        "prediction": "Catholic Church"
+      },
+      {
+        "qid": "57332a734776f41900660729",
+        "condition": "none",
+        "judge_a": "UNSUPPORTED",
+        "judge_b": "SUPPORTED",
+        "prediction": "Following the Congress of Vienna of 1804"
+      },
+      {
+        "qid": "572ffb02b2c2fd14005686ba",
+        "condition": "none",
+        "judge_a": "UNSUPPORTED",
+        "judge_b": "SUPPORTED",
+        "prediction": "Rhone"
+      },
+      {
+        "qid": "57297a276aef051400154f8a",
+        "condition": "strict_prompt",
+        "judge_a": "SUPPORTED",
+        "judge_b": "UNSUPPORTED",
+        "prediction": "Based on the provided context, Fermat numbers take the form of $1 + 2^{2^n}$."
+      }
+    ]
+  },
   "note": "Inter-judge agreement bounds label reliability from one side only: two LLM judges can share a bias no human would. Disagreement is decisive against the labels; agreement is supportive, not proof."
 }

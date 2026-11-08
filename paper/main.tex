@@ -78,8 +78,8 @@ passages, adjacent but wrong passages, passages whose facts have been falsified,
 and removal of the answer-bearing passage --- the rate of unsupported assertion
 never rises.
 Eight of nine paired comparisons against the clean condition are null after
-Benjamini--Hochberg correction, with differences bounded within
-\(\pm\)\NUM{halluBoundPartial} points; the ninth is a significant \emph{decrease}
+Benjamini--Hochberg correction, and no condition's 95\% interval extends above
+\(\NUM{halluMaxUpper}\) points; the ninth is a significant \emph{decrease}
 (total random corruption, \(q = 0.018\)), where the generator abstains on 99\% of
 questions and asserts nothing at all. What changes instead is which \emph{safe}
 failure mode absorbs the loss, and the two behave very differently.
@@ -268,9 +268,8 @@ is assigned by a language model invites the obvious objection. Across
 \NUM{judgeInvocationPct}\% of items, and of the \NUM{nUnsupported} unsupported
 labels that constitute the headline metric, \NUM{nUnsupportedRule} follow from the
 rule and \NUM{nUnsupportedJudged} from the judge. The primary outcome is therefore
-\NUM{ruleDerivedPct}\% rule-derived. It does not stand or fall on judge quality,
-and a reader who distrusts LLM judgment entirely can discard the judged subset and
-still recover the result.
+\NUM{ruleDerivedPct}\% rule-derived, and Section~\ref{sec:results} tests directly
+whether the result survives discarding the judged subset.
 
 Every judged row now stores the exact context the judge ruled on, so any verdict
 can be re-audited or re-scored by a second model. Rows collected before this was
@@ -371,6 +370,22 @@ We state this as the weak result it is: overlap at these sample sizes is evidenc
 against a large discrepancy, not evidence of equivalence. But it is the check a
 reader is entitled to demand, and it costs nothing beyond data already collected.
 
+\paragraph{Is the result an artefact of the judge?}
+A second judge from a different model family (\NUM{judgeB}) re-scored the
+\NUM{judgeAgreementN} judged answers whose context was stored. Raw agreement is
+\NUM{judgeRawAgree}\%, but that reflects the majority label and Cohen's
+\(\kappa\) is \NUM{judgeKappa}: of the \NUM{judgeAUnsupN} answers the primary judge
+called unsupported, the second agreed on \NUM{judgeAUnsupAgree}. In all five the
+answer appears verbatim in the retrieved text, which suggests the primary judge
+over-calls this label. We therefore do not rely on judge-assigned
+\textsc{unsupported} labels. Counting only rule-derived hallucinations, the rate rises
+in \NUM{ruleOnlyUp} of nine conditions (\NUM{ruleOnlyNull} null,
+\NUM{ruleOnlyDown} significant decreases; no interval extends above
+\(\NUM{ruleOnlyUpper}\) points). Reclassifying judge-assigned \textsc{unsupported}
+labels as grounded error leaves the falsified-evidence effect intact
+(\(\NUM{reclassGroundedCF}\) points at 50\% counterfactual corruption).
+Neither headline depends on the judge.
+
 \paragraph{Inference-time defences do not address the failure they are aimed at.}
 The standard remedy for RAG error is to instruct the model to answer only from
 retrieved text and to refuse otherwise. Evaluated under counterfactual corruption
@@ -421,9 +436,10 @@ obvious next question, and this design answers it by swapping a single argument.
 % discoverable either way.
 Judges and generator are different checkpoints but come from one model family,
 and two judge checkpoints were used across phases (\S\ref{sec:method}); a shared
-family can share blind spots. Judge labels have not yet been validated against human
-annotation. Because \NUM{ruleDerivedPct}\% of the headline metric is rule-derived,
-this bounds rather than removes the concern. All findings concern a single generator
+family can share blind spots. Judge labels have not been validated against human annotation, and an independent
+model judge did not reproduce the primary judge's \textsc{unsupported} labels
+(Section~\ref{sec:results}); the headline conclusions are therefore stated so as to
+hold under rule-derived labels alone. All findings concern a single generator
 and do not establish cross-model generality. Abstention is
 detected by a lexical rule whose precision and recall are measured on a
 hand-labelled subset but which will misclassify unusual phrasings. The corpus is
