@@ -243,6 +243,14 @@ def judge_faithfulness(question: str, contexts: list, prediction: str, max_retri
         try:
             llm_limiter.acquire(1)
             note_call()
+            if "gemma" in config.JUDGE_MODEL.lower():
+                # Same REST path as Gemma generation: keeps only non-thought parts,
+                # so the label is parsed from the verdict, not from the reasoning.
+                from utils.llm import _rest_generate
+                out = _rest_generate(config.JUDGE_MODEL, prompt, 0.0)
+                if out["status"] != "ok":
+                    return "JUDGE_ERROR"
+                return parse_judge_label(out["text"])
             response = _get_judge().generate_content(
                 prompt,
                 generation_config=genai.types.GenerationConfig(temperature=0.0),

@@ -398,9 +398,22 @@ def macros(baseline, noise, predict, manifest, synthetic, judge=None,
             if share is not None:
                 out.append(m("ruleDerivedPct", f"{100 * (1 - share):.0f}"))
         agree = judge.get("agreement") or {}
-        if agree.get("cohens_kappa") is not None:
-            out.append(m("judgeKappa", f"{agree['cohens_kappa']:.3f}"))
-            out.append(m("judgeAgreementN", agree.get("n", "??")))
+        if agree.get("n"):
+            out.append(m("judgeAgreementN", agree["n"]))
+            out.append(m("judgeB", esc(agree.get("judge_b", "??"))))
+            out.append(m("judgeRawAgree", f"{100 * agree['raw_agreement']:.1f}"))
+            if agree.get("cohens_kappa") is not None:
+                out.append(m("judgeKappa", f"{agree['cohens_kappa']:.2f}"))
+            conf = agree.get("confusion") or {}
+            # Agreement on the rare class is what matters for the headline metric;
+            # kappa on an 80/5 split is unstable and raw agreement is dominated by
+            # the majority label.
+            for lab, tag in (("UNSUPPORTED", "Unsup"), ("SUPPORTED", "Sup")):
+                row = conf.get(lab) or {}
+                n_a = sum(row.values())
+                if n_a:
+                    out.append(m(f"judgeA{tag}N", n_a))
+                    out.append(m(f"judgeA{tag}Agree", row.get(lab, 0)))
 
     return "\n".join(out)
 

@@ -39,9 +39,12 @@ from utils.pipeline import save_results
 JUDGE_LABELS = ("SUPPORTED", "UNSUPPORTED", "REFUSAL")
 
 
-def load_rows(dataset):
+def load_rows(dataset, primary_only=False):
+    """All scored rows. primary_only: untagged results files only (the primary
+    generator's run), no cross-model replications and no checkpoints."""
     rows, seen = [], set()
-    for path in sorted(glob.glob(os.path.join(config.RESULTS_DIR, f"phase*_{dataset}*.json"))):
+    pattern = f"phase*_{dataset}.json" if primary_only else f"phase*_{dataset}*.json"
+    for path in sorted(glob.glob(os.path.join(config.RESULTS_DIR, pattern))):
         with open(path, "r", encoding="utf-8") as f:
             payload = json.load(f)
         if payload.get("manifest", {}).get("synthetic"):
@@ -51,8 +54,8 @@ def load_rows(dataset):
             if key not in seen:
                 seen.add(key)
                 rows.append(row)
-    for path in sorted(glob.glob(os.path.join(config.RESULTS_DIR, "checkpoints",
-                                              f"{dataset}_*.json"))):
+    for path in ([] if primary_only else sorted(glob.glob(
+            os.path.join(config.RESULTS_DIR, "checkpoints", f"{dataset}_*.json")))):
         with open(path, "r", encoding="utf-8") as f:
             for row in json.load(f):
                 key = (row.get("condition"), row.get("qid"), row.get("repeat", 0))
@@ -147,7 +150,10 @@ def agreement_report(rows, judge_b_model, limit):
     print(f"  Re-judging {len(sample)} of {len(eligible)} eligible rows "
           f"with {judge_b_model}\n")
 
-    original = os.environ.get("JUDGE_MODEL")
+    # Restore from config, not the environment: JUDGE_MODEL is usually unset in
+    # the environment, so the old code never restored it and recorded judge B
+    # as judge A in the report.
+    original = config.JUDGE_MODEL
     config.JUDGE_MODEL = judge_b_model
     import utils.metrics as M
     M._judge_model = None  # force the client to rebuild against the new model
@@ -169,8 +175,7 @@ def agreement_report(rows, judge_b_model, limit):
         if (i + 1) % 25 == 0:
             print(f"    {i + 1}/{len(sample)}")
 
-    if original:
-        config.JUDGE_MODEL = original
+    config.JUDGE_MODEL = original
 
     if not a_labels:
         print("  No comparable verdicts returned.")
@@ -191,7 +196,7 @@ def agreement_report(rows, judge_b_model, limit):
         confusion[a][b] += 1
 
     return {
-        "judge_a": config.LLM_MODEL and config.JUDGE_MODEL,
+        "judge_a": config.JUDGE_MODEL,
         "judge_b": judge_b_model,
         "n": len(a_labels),
         "raw_agreement": round(raw, 4),
@@ -221,6 +226,8 @@ def main():
     p.add_argument("--judge-b", default="models/gemini-flash-lite-latest",
                    help="Second judge; must differ from the primary judge")
     p.add_argument("--limit", type=int, default=120)
+    p.add_argument("--primary-only", action="store_true",
+                   help="Re-judge only rows from the primary run's results files")
     p.add_argument("--agreement-only", action="store_true",
                    help="Keep the existing dependence block and replace only the "
                         "agreement block. The dependence numbers are reported in the "
@@ -228,7 +235,7 @@ def main():
                         "results file (cross-model runs included) would change them.")
     args = p.parse_args()
 
-    rows = load_rows(args.dataset)
+    rows = load_rows(args.dataset, primary_only=args.primary_only)
     if not rows:
         sys.exit(f"No results for '{args.dataset}'.")
 
