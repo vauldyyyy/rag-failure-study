@@ -59,11 +59,20 @@ def is_fatal_error(e) -> bool:
     return any(m in msg for m in _FATAL_MARKERS)
 
 
+def supports_system_instruction(model_name: str) -> bool:
+    """Gemma checkpoints served through the Gemini API reject system_instruction
+    ("Developer instruction is not enabled"). For them the identical instruction
+    text is prepended to the user turn instead; see generate_answer."""
+    return "gemma" not in model_name.lower()
+
+
 def _get_model(model_name: str, system_prompt: str):
-    key = (model_name, system_prompt)
+    native = supports_system_instruction(model_name)
+    key = (model_name, system_prompt if native else None)
     if key not in _MODELS:
         _MODELS[key] = genai.GenerativeModel(
-            model_name=model_name, system_instruction=system_prompt
+            model_name=model_name,
+            system_instruction=system_prompt if native else None,
         )
     return _MODELS[key]
 
@@ -99,6 +108,8 @@ def generate_answer(query: str, retrieved_contexts: list,
 
     model = _get_model(model_name, system_prompt)
     user_prompt = build_prompt(query, retrieved_contexts)
+    if not supports_system_instruction(model_name):
+        user_prompt = f"{system_prompt}\n\n{user_prompt}"
 
     for attempt in range(max_retries):
         try:

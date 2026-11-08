@@ -322,6 +322,14 @@ def common_args(description):
 
     config.set_dry_run(args.dry_run)
     config.set_run_tag(args.tag)
+    # --model used to reach the generator but not the provenance manifest, which
+    # kept recording config.LLM_MODEL: a cross-model run was labelled as the
+    # primary model. Make the chosen generator the single source of truth.
+    if args.model != config.LLM_MODEL:
+        config.LLM_MODEL = args.model
+        config.JUDGE_SELF_EVAL = config.JUDGE_MODEL == config.LLM_MODEL
+        print(f"Generator: {config.LLM_MODEL} (judge: {config.JUDGE_MODEL}, "
+              f"self-eval: {config.JUDGE_SELF_EVAL})\n")
     if args.tag:
         print(f"Run tag '{args.tag}' — writing to *_{args.tag}.json\n")
     if args.dry_run:

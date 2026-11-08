@@ -5,9 +5,9 @@
     "n_qa": 150,
     "n_answerable": 114,
     "n_unanswerable": 36,
-    "llm_model": "models/gemini-3.5-flash-lite",
+    "llm_model": "models/gemini-3.1-flash-lite",
     "judge_model": "models/gemini-3.1-flash-lite",
-    "judge_self_eval": false,
+    "judge_self_eval": true,
     "embed_backend": "local",
     "embed_model": "sentence-transformers/all-MiniLM-L6-v2",
     "chunk_size": 256,
@@ -57,7 +57,8 @@
     ],
     "grid_complete": false,
     "conditions_collected": 3,
-    "conditions_planned": 10
+    "conditions_planned": 10,
+    "provenance_note": "Corrected 2026-11-08: the manifest originally recorded models/gemini-3.5-flash-lite because --model did not reach run_manifest. Every condition summary records models/gemini-3.1-flash-lite as generator, which is also the judge, so this partial run (3/10 conditions) is self-evaluated. Not used in the paper."
   },
   "hypotheses": {
     "H1": "silent-failure rate is non-monotonic in noise fraction (peaks at partial noise, falls at total noise)",
