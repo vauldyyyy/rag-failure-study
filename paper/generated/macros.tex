@@ -3,7 +3,8 @@
 \newcommand{\nAnswerable}{114}
 \newcommand{\nUnanswerable}{36}
 \newcommand{\genModel}{models/gemini-3.5-flash-lite}
-\newcommand{\judgeModel}{models/gemini-3.6-flash}
+\newcommand{\judgeModelBaseline}{models/gemini-3.6-flash}
+\newcommand{\judgeModel}{models/gemini-3.1-flash-lite}
 \newcommand{\embedModel}{sentence-transformers/all-MiniLM-L6-v2}
 \newcommand{\randomSeed}{20240617}
 \newcommand{\baseF}{76.5}
@@ -38,6 +39,28 @@
 \newcommand{\bestAnyAUROC}{0.770}
 \newcommand{\bestSilentSignal}{min\_score}
 \newcommand{\bestSilentAUROC}{0.687}
+\newcommand{\groundedClean}{2.0}
+\newcommand{\groundedCF}{20.7}
+\newcommand{\correctCF}{42.0}
+\newcommand{\mitNUnsupNone}{8}
+\newcommand{\mitNUnsupStrict}{3}
+\newcommand{\mitNCorrectNone}{62}
+\newcommand{\mitNCorrectStrict}{35}
+\newcommand{\mitCorrectNonePct}{41.3}
+\newcommand{\mitCorrectPerFabrication}{5.4}
+\newcommand{\mitDeltaHallu}{-0.033}
+\newcommand{\mitPHallu}{= 0.009}
+\newcommand{\mitDeltaAbstain}{+0.167}
+\newcommand{\mitPAbstain}{< 0.0001}
+\newcommand{\mitDeltaCorrect}{-0.180}
+\newcommand{\mitPCorrect}{< 0.0001}
+\newcommand{\mitDeltaGrounded}{+0.047}
+\newcommand{\mitPGrounded}{= 0.245}
+\newcommand{\manipNNatural}{53}
+\newcommand{\manipAbstainNatural}{0.78}
+\newcommand{\manipAbstainSynthetic}{0.92}
+\newcommand{\manipUnsupNatural}{0.05}
+\newcommand{\manipUnsupSynthetic}{0.01}
 \newcommand{\nScoredRows}{950}
 \newcommand{\judgeInvocationPct}{5.0}
 \newcommand{\nUnsupported}{39}
