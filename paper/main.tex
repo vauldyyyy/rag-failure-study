@@ -132,6 +132,13 @@ anything is amiss --- its abstention rate barely moves. The property RAG is
 deployed for, faithfulness to retrieved text, is precisely what makes corrupted
 retrieval dangerous.
 
+That models adopt coherent false evidence is not itself new: the knowledge-conflict
+literature has shown it repeatedly \citep{xie2024chameleon,wu2024clasheval}. What
+that literature does not measure is the rest of the outcome distribution --- whether
+unsupported assertion moves at the same time, and whether abstention responds to
+falsified evidence the way it responds to absent evidence. Our contribution is that
+decomposition, under matched manipulations within a single design.
+
 \paragraph{Contributions.}
 \begin{enumerate}\itemsep0pt
 \item Evidence that the rate of unsupported assertion never rises across nine
@@ -139,8 +146,8 @@ retrieval dangerous.
       adjacent-but-wrong, falsified, and removed evidence. The only
       change surviving FDR correction is a \emph{decrease}, under total random
       corruption (Table~\ref{tab:noise}).
-\item The finding that failure mode is governed by the \emph{kind} of degradation
-      rather than its degree: absent evidence yields abstention
+\item The finding, within one design, that failure mode is governed by the
+      \emph{kind} of degradation rather than its degree: absent evidence yields abstention
       (\NUM{abstainAtTotal}\% at total corruption), while falsified evidence yields
       a roughly tenfold increase in grounded error ($p < 0.0001$) with no
       significant rise in abstention ($p = 0.06$).
@@ -163,6 +170,22 @@ perturbations follow that taxonomy and we claim no novelty for it.
 \emph{random} documents can raise accuracy while related, non-answer-bearing
 documents depress it. Both report accuracy under a fixed noise setting; we vary the
 corruption fraction continuously and report what the model does when it is wrong.
+
+\paragraph{Knowledge conflicts and corrupted evidence.}
+Our counterfactual condition is a context--memory conflict in the terms of
+\citet{xu2024conflictsurvey}, and its construction follows \citet{longpre2021conflicts}.
+\citet{xie2024chameleon} find that models readily accept coherent external evidence
+that contradicts their parametric memory, and \citet{wu2024clasheval} find that six
+models, GPT-4o among them, adopt incorrect retrieved content over a correct prior
+answer more than 60\% of the time. Our accuracy collapse under falsified evidence
+replicates that direction. These studies measure \emph{which answer} a model adopts;
+they do not separate an adopted falsehood from an unsupported assertion, and they do
+not compare the model's abstention response to falsified versus absent evidence,
+which is where our results differ most. \citet{zou2025poisonedrag} show that a few
+optimised malicious passages can steer a RAG system to an attacker-chosen answer. Our
+substitutions are not optimised --- a single answer string is replaced --- which
+suggests the failure needs no adversary: ordinary errors in a knowledge base would be
+repeated in the same way.
 
 \paragraph{Position and distraction effects.}
 \citet{liu2024lost} show accuracy depends on where the relevant passage sits in a
