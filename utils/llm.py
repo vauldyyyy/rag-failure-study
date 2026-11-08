@@ -88,7 +88,7 @@ def _rest_generate(model_name: str, user_prompt: str, temperature: float):
                  "Content-Type": "application/json"},
         json={"contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
               "generationConfig": {"temperature": temperature}},
-        timeout=60,
+        timeout=45,
     )
     if r.status_code != 200:
         try:
@@ -156,6 +156,7 @@ def generate_answer(query: str, retrieved_contexts: list,
         user_prompt = f"{system_prompt}\n\n{user_prompt}"
 
     transient = 0
+    timeouts = 0
     attempt = 0
     while attempt < max_retries:
         attempt += 1
@@ -181,6 +182,19 @@ def generate_answer(query: str, retrieved_contexts: list,
             # let the caller checkpoint rather than burn attempts.
             if is_daily_quota_error(e):
                 raise DailyQuotaExhausted(f"Daily generation quota exhausted: {e}") from e
+            if "read timed out" in str(e).lower():
+                # At temperature 0 a prompt that sends the model into a reasoning
+                # loop does so on every attempt: observed on the same items
+                # repeatedly with gemma-4-26b-a4b-it. One retry rules out a network
+                # blip; after that the item is recorded as an error (INVALID,
+                # excluded from rates and counted in the results) rather than
+                # burning fifteen attempts.
+                timeouts += 1
+                if timeouts >= 2:
+                    return {"text": "", "status": "error", "detail": f"timeout x{timeouts}: {e}"}
+                attempt -= 1
+                print(f"    [gen] read timeout, one retry", file=sys.stderr, flush=True)
+                continue
             if is_transient_server_error(e) and transient < TRANSIENT_RETRIES:
                 # Server hiccup: does not consume one of the ordinary attempts.
                 transient += 1

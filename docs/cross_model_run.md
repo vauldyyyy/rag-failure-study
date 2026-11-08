@@ -54,3 +54,14 @@ finds every condition complete in its checkpoint and only computes statistics.
 
 Observed at run time: 7–31 s per Gemma call (250–1,300 reasoning tokens) and
 about one call in five failing transiently (timeout, 503 or 500) before retry.
+
+## Items that never finish
+
+Some prompts send Gemma 4 into a reasoning loop that outlasts any timeout, and
+at temperature 0 they do so on every attempt (question 7, "What is a connection
+identifier", hangs every time in the clean condition). The API rejects
+`thinkingBudget` and `thinkingLevel` for this model, so reasoning cannot be
+capped. Such items now get one retry after a 45 s read timeout and are then
+recorded as `gen_status: error` (INVALID: excluded from every rate, counted in
+`n_invalid`, reported in the paper). Before this, each one consumed fifteen
+attempts, about fifteen minutes. Checkpoints are written every five items.

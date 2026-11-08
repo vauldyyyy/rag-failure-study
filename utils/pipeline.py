@@ -211,10 +211,12 @@ def run_condition(name, qa_pairs, retrieval, corpus, k=config.TOP_K,
                 row["treatment_applied"] = row["n_perturbed"] > 0
             rows.append(row)
 
+            if (i + 1) % 5 == 0:
+                # Small, cheap file; frequent saves bound what a restart can lose.
+                save_checkpoint(name, rows, dataset)
             if verbose and (i + 1) % 25 == 0:
                 suffix = f" (repeat {r + 1}/{repeats})" if repeats > 1 else ""
                 print(f"  [{name}] {i + 1}/{len(qa_pairs)}{suffix}")
-                save_checkpoint(name, rows, dataset)
 
         if interrupted:
             break
