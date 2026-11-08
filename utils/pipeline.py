@@ -157,15 +157,19 @@ def run_condition(name, qa_pairs, retrieval, corpus, k=config.TOP_K,
         rng = random.Random(seed + r)
 
         for i, qa in enumerate(qa_pairs):
-            if (qa["qid"], r) in done:
-                continue
             ranked = retrieval.get(qa["qid"], [])
 
+            # Drawn before the resume check: the perturbation RNG is one stream per
+            # condition, so skipping a finished item without consuming its draws
+            # would give every later item a different perturbation than an
+            # uninterrupted run.
             context = noise_mod.apply_noise(
                 ranked, qa, k,
                 noise_type=noise_type, noise_frac=noise_frac,
                 corpus=corpus, rng=rng, gold_position=gold_position,
             )
+            if (qa["qid"], r) in done:
+                continue
             if rerank is not None:
                 context = rerank(qa["question"], context)
 

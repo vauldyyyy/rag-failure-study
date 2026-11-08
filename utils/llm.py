@@ -88,7 +88,7 @@ def _rest_generate(model_name: str, user_prompt: str, temperature: float):
                  "Content-Type": "application/json"},
         json={"contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
               "generationConfig": {"temperature": temperature}},
-        timeout=45,
+        timeout=int(os.getenv("GEN_TIMEOUT", "45")),
     )
     if r.status_code != 200:
         try:
