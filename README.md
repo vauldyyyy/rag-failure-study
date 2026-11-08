@@ -1,18 +1,17 @@
-# When Retrieval Fails
+# Faithful to a Fault
 
-**An empirical study of how RAG systems behave when retrieval degrades — and whether the failure can be seen coming.**
+**RAG repeats corrupted evidence without hallucinating.** A preregistered study of how retrieval-augmented generation fails when its evidence is missing, adjacent-but-wrong, or false.
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"/>
-  <img src="https://img.shields.io/badge/Gemini-2.5%20Flash-4285F4?style=flat-square&logo=google&logoColor=white" alt="Gemini"/>
+  <img src="https://img.shields.io/badge/Gemini-3.5%20Flash--Lite-4285F4?style=flat-square&logo=google&logoColor=white" alt="Gemini"/>
   <img src="https://img.shields.io/badge/FAISS-IndexFlatIP-FF6F00?style=flat-square" alt="FAISS"/>
-  <img src="https://img.shields.io/badge/Data-SQuAD%20v2%20%2B%20HotpotQA-blueviolet?style=flat-square" alt="Datasets"/>
+  <img src="https://img.shields.io/badge/Data-SQuAD%20v2-blueviolet?style=flat-square" alt="Datasets"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="MIT"/>
 </p>
 
 <p align="center">
-  <b>Status: pipeline complete, tested and dry-run verified end-to-end · experiments not yet run · no results to report</b><br/>
-  <sub>Target: UncertaiNLP @ EMNLP 2026 short paper — deadline 7 August 2026</sub>
+  <b>Status: experiments complete (n = 150, 950 scored generations) · short paper in preparation</b>
 </p>
 
 ---
@@ -39,18 +38,39 @@ Paper skeleton: [`paper/outline.md`](paper/outline.md). Draft: [`paper/main.tex`
 
 ## Results
 
-**There are none yet.** The pipeline is implemented, unit-tested, and has been
-executed end-to-end against a stub model to verify every code path — but no
-experiment has been run against the API. This section will hold Table 1 and
-Figures 1–4 once `run_all.py` has completed.
+150 SQuAD v2 questions (114 answerable, 36 unanswerable), generator
+`gemini-3.5-flash-lite` at temperature 0, K = 4 retrieved chunks, nine corruption
+conditions. Full numbers with 95% bootstrap intervals: Table 1 in
+[`paper/main.tex`](paper/main.tex), generated from [`results/`](results/).
 
-Nothing in this repository reports a number the pipeline did not produce, and that
-is enforced rather than promised:
+| Condition | Correct | Abstained | Unsupported (hallucination) | Wrong but faithful to context |
+|---|---|---|---|---|
+| clean | 64.0% | 29.3% | 4.7% | 2.0% |
+| adjacent-but-wrong, 75% | 52.0% | 38.0% | 4.7% | 5.3% |
+| irrelevant, 100% | 0.0% | 99.3% | 0.0% | 0.7% |
+| **falsified, 50%** | **42.0%** | **32.7%** | **4.7%** | **20.7%** |
 
-- every number in the paper is generated from `results/*.json` by `paper/make_tables.py`;
-- `verify_paper.py` fails the build on hardcoded numbers, undefined macros, missing
-  figures, uncited or unverified references, template placeholders, or results
-  produced in dry-run mode;
+- **Hallucination never rises.** Eight of nine paired comparisons against clean are
+  null after Benjamini–Hochberg correction (within ±2.7 points); the ninth is a
+  significant *decrease*.
+- **Falsified evidence is the dangerous case.** Accuracy falls 22 points, abstention
+  does not significantly rise (p = 0.06), and wrong-but-faithful answers rise about
+  tenfold (+18.7 points, p < 0.0001). The model can tell *no* evidence from *some*
+  evidence, but not true evidence from false.
+- **"Answer only from the context" does not fix it.** Strict prompting cuts
+  hallucination from 8 items to 3 but gives up 27 correct answers to do so, and
+  leaves wrong-but-faithful answers unchanged (p = 0.245).
+- **The preregistered hypothesis was not supported**: silent failure did not peak at
+  partial corruption, and the pre-data power analysis said n = 150 could not resolve
+  it. Reported as unsupported, not reframed.
+
+How the numbers are kept honest:
+
+- every number in the paper's tables and most of its prose is generated from
+  `results/*.json` by `paper/make_tables.py`;
+- `verify_paper.py` fails on undefined macros, missing figures, uncited or
+  unverified references, template placeholders, or results produced in dry-run
+  mode, and flags any number typed into the prose by hand;
 - CI asserts that the guard *rejects* synthetic results, so the guard itself cannot
   silently break.
 
@@ -115,10 +135,11 @@ from one that fired on all of them.
 | 4 | mitigation | related@50%, K=4 | 5 |
 | 3 | — re-analysis, 0 API calls | — | — |
 
-Data: **SQuAD v2 dev** — 1,204 documents → 1,330 chunks, 600 questions (420
-answerable / 180 unanswerable, seed 20240617). The unanswerable split is the point:
-gold paragraph present, topically perfect, no answer in it. Second domain:
-**HotpotQA dev (distractor)**, multi-hop with human-selected hard distractors.
+Data: **SQuAD v2 dev** — 1,204 documents → 1,330 chunks; the reported study uses
+150 questions (114 answerable / 36 unanswerable, seed 20240617). The unanswerable
+split is the point: gold paragraph present, topically perfect, no answer in it. The
+pipeline also supports a second domain (**HotpotQA**, `--dataset hotpot`) and the
+context-size/position sweep (phase 2c); neither is part of the reported results.
 
 ---
 
@@ -189,8 +210,9 @@ python annotate.py score  --task abstention      # precision/recall of the abste
 ```
 
 This is the cheapest credibility the project can buy, and it is the one thing the
-code cannot do for you. The judge currently shares a checkpoint with the generator;
-without κ, every judge-based number is self-evaluation.
+code cannot do for you. The judges are different checkpoints from the generator, but
+until κ is reported the judged labels are unvalidated (79% of the headline metric is
+rule-derived and does not depend on them).
 
 ### Build the paper
 
@@ -271,9 +293,9 @@ rag-failure-study/
 Stated up front because they bound what any result here can claim. Each one now has
 either a fix or a harness; none is hand-waved.
 
-- **The judge shares a checkpoint with the generator** — faithfulness verdicts are
-  self-evaluation. Every results file records `judge_self_eval: true`. Set
-  `JUDGE_MODEL` to a different model, and run `annotate.py` to report κ.
+- **Judge labels are not yet human-validated.** Judges are separate checkpoints from
+  the generator (`judge_self_eval: false` in every results file) but share its model
+  family. `annotate.py` reports κ against human labels.
 - **One generator family.** `--model` threads through every phase; one extra run
   gives cross-model evidence.
 - **Abstention is detected by rule.** Hedged assertions are excluded by
